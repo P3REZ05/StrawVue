@@ -1,0 +1,18 @@
+@import 'tailwindcss';
+@import './variables.css';
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-primary);
+  color: var(--dark);
+  background-color: var(--secondary);
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}

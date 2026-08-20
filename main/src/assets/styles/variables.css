@@ -1,0 +1,14 @@
+:root {
+  --primary: #ff69b4;
+  --info: #ff85c1;
+  --light: #d291bc;
+  --grey: #efb2d7;
+  --dark: #000000;
+  --secondary: #ffffff;
+  --success: #ffc1cc;
+
+  --font-primary: 'Roboto', sans-serif;
+  --font-secondary: 'Open Sans', sans-serif;
+  --font-first: 'Harmonia Sans Pro Condensed Semi Bold', sans-serif;
+  --font-third: 'Ut Sa Ha Gumm Thai Regular', sans-serif;
+}
