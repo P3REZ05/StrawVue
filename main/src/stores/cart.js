@@ -10,8 +10,13 @@ export const useCartStore = defineStore('cart', {
   },
   actions: {
     add(product, quantity = 1) {
-      const existingItem = this.items.find((item) => item.id === product.id)
-      const available = product.stock ?? Infinity
+      const itemKey = product.variantId ? `${product.id}-${product.variantId}` : product.id
+      const existingItem = this.items.find((item) => (item.variantId ? `${item.id}-${item.variantId}` : item.id) === itemKey)
+      const available = Number(product.saleStock ?? product.stock ?? Infinity)
+
+      if (!Number.isFinite(available) || available <= 0) {
+        return
+      }
 
       if (existingItem) {
         existingItem.quantity = Math.min(existingItem.quantity + quantity, available)
@@ -35,12 +40,14 @@ export const useCartStore = defineStore('cart', {
       const item = this.items.find((product) => product.id === id)
       if (!item) return
 
+      const available = Number(item.saleStock ?? item.stock ?? Infinity)
+
       if (quantity <= 0) {
         this.remove(id)
         return
       }
 
-      item.quantity = Math.min(quantity, item.stock ?? Infinity)
+      item.quantity = Math.min(quantity, Number.isFinite(available) ? available : quantity)
       this.save()
     },
     remove(id) {

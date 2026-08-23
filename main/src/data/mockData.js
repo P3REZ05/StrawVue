@@ -56,6 +56,18 @@ export const promotions = [
   { id: 3, title: 'Bases mate', label: 'Trending', detail: 'Nueva colección', active: true }
 ]
 
+export const defaultPromotions = [
+  {
+    id: 'hero-default-1',
+    title: 'Nueva colección',
+    subtitle: 'Looks para cada momento',
+    image: '',
+    link: '/tienda',
+    active: true,
+    accent: 'Rosado glam'
+  }
+]
+
 export const socialLinks = {
   facebook: 'https://www.facebook.com/strawberry_makeup05',
   tiktok: 'https://www.tiktok.com/@strawberry_makeup05',

@@ -1,5 +1,11 @@
 <script setup>
 import { ref } from 'vue'
+import {
+  Boxes,
+  ShoppingCart,
+  Store,
+  BadgeDollarSign
+} from 'lucide-vue-next'
 import PurchaseInventory from './PurchaseInventory.vue'
 import PurchaseOrders from './PurchaseOrders.vue'
 import SaleInventory from './SaleInventory.vue'
@@ -8,10 +14,10 @@ import SalesRegister from './SalesRegister.vue'
 const activeTab = ref('purchase-inventory')
 
 const tabs = [
-  { id: 'purchase-inventory', label: 'Inventario de Compras', icon: 'box' },
-  { id: 'purchases', label: 'Compras', icon: 'cart' },
-  { id: 'sale-inventory', label: 'Inventario de Venta', icon: 'tag' },
-  { id: 'sales', label: 'Ventas', icon: 'cash' }
+  { id: 'purchase-inventory', label: 'Inventario de Compras', icon: Boxes },
+  { id: 'purchases', label: 'Compras', icon: ShoppingCart },
+  { id: 'sale-inventory', label: 'Inventario de Venta', icon: Store },
+  { id: 'sales', label: 'Ventas', icon: BadgeDollarSign }
 ]
 </script>
 
@@ -31,17 +37,7 @@ const tabs = [
         :class="activeTab === tab.id ? 'bg-[var(--primary)] text-white shadow-md' : 'bg-white text-neutral-600 hover:bg-pink-50 hover:text-[var(--primary)]'"
         @click="activeTab = tab.id"
       >
-        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/>
-          <path d="M3 8l9 5 9-5"/>
-          <path d="M12 13v8"/>
-          <path d="M3 4h2l2.2 11.1a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.6L20 8H7"/>
-          <circle cx="10" cy="20" r="1"/>
-          <circle cx="17" cy="20" r="1"/>
-          <path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/>
-          <circle cx="7" cy="7" r="1.5"/>
-          <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-        </svg>
+        <component :is="tab.icon" class="size-4" />
         {{ tab.label }}
       </button>
     </div>

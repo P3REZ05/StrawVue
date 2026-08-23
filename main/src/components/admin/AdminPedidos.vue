@@ -13,9 +13,9 @@ const selectedAction = ref(null)
 function getStatusBadgeClass(status) {
   switch (status?.toLowerCase()) {
     case 'pendiente': return 'bg-amber-400'
+    case 'pagado': return 'bg-emerald-500'
     case 'enviado': return 'bg-blue-500'
-    case 'cancelado': return 'bg-red-500'
-    case 'entregado': return 'bg-emerald-500'
+    case 'devuelto': return 'bg-red-500'
     default: return 'bg-neutral-400'
   }
 }
@@ -23,9 +23,9 @@ function getStatusBadgeClass(status) {
 function getStatusText(status) {
   switch (status?.toLowerCase()) {
     case 'pendiente': return 'Pendiente'
+    case 'pagado': return 'Pagado'
     case 'enviado': return 'Enviado'
-    case 'cancelado': return 'Cancelado'
-    case 'entregado': return 'Entregado'
+    case 'devuelto': return 'Devuelto'
     default: return status || 'Desconocido'
   }
 }
@@ -34,21 +34,20 @@ function getAvailableStatusActions(currentStatus) {
   switch (currentStatus?.toLowerCase()) {
     case 'pendiente':
       return [
-        { status: 'enviado', text: 'Pedido Enviado', icon: 'truck' },
-        { status: 'cancelado', text: 'Cancelar pedido', icon: 'x-circle', isDanger: true }
+        { status: 'pagado', text: 'Confirmar pago', icon: 'check-circle', isSuccess: true },
+        { status: 'devuelto', text: 'Devolver pedido', icon: 'x-circle', isDanger: true }
+      ]
+    case 'pagado':
+      return [
+        { status: 'enviado', text: 'Marcar como Enviado', icon: 'truck' },
+        { status: 'devuelto', text: 'Devolver pedido', icon: 'x-circle', isDanger: true }
       ]
     case 'enviado':
       return [
-        { status: 'entregado', text: 'Marcar como Entregado', icon: 'check-circle', isSuccess: true },
-        { status: 'cancelado', text: 'Cancelar pedido', icon: 'x-circle', isDanger: true },
-        { status: 'pendiente', text: 'Pedido Pendiente', icon: 'box', isWarning: true }
+        { status: 'devuelto', text: 'Marcar como Devuelto', icon: 'x-circle', isDanger: true },
+        { status: 'pagado', text: 'Volver a Pagado', icon: 'check-circle', isSuccess: true }
       ]
-    case 'cancelado':
-      return [
-        { status: 'enviado', text: 'Pedido Enviado', icon: 'truck' },
-        { status: 'pendiente', text: 'Pedido Pendiente', icon: 'box', isWarning: true }
-      ]
-    case 'entregado':
+    case 'devuelto':
       return []
     default:
       return []
@@ -72,7 +71,7 @@ function orderTotal(order) {
 <template>
   <div class="space-y-6">
     <h2 class="text-2xl font-bold text-black">Gestión de Pedidos</h2>
-    <p class="text-sm text-neutral-500">Los pedidos marcados como <strong class="text-emerald-600">entregado</strong> pasan automáticamente al historial.</p>
+    <p class="text-sm text-neutral-500">Los pedidos marcados como <strong class="text-emerald-600">devuelto</strong> quedan en historial y reingresan el stock disponible.</p>
 
     <div class="overflow-x-auto rounded-2xl bg-white shadow-sm">
       <table class="w-full min-w-200 text-sm">

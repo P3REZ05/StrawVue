@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAdminStore } from '../stores/admin'
 import Home from '../views/Home.vue'
 import Terms from '../views/Terms.vue'
 import About from '../views/About.vue'
@@ -9,7 +10,7 @@ import Cart from '../views/Cart.vue'
 import AdminLogin from '../views/admin/AdminLogin.vue'
 import AdminPanel from '../components/admin/AdminPanel.vue'
 
-export default createRouter({
+const router = createRouter({
   history: createWebHistory(),
   scrollBehavior: () => ({ top: 0 }),
   routes: [
@@ -24,3 +25,28 @@ export default createRouter({
     { path: '/admin/dashboard', name: 'admin-dashboard', component: AdminPanel }
   ]
 })
+
+router.beforeEach(async (to, from, next) => {
+  const adminStore = useAdminStore()
+  await adminStore.init()
+  const isAdminRoute = to.path.startsWith('/admin') && to.path !== '/admin'
+
+  if (to.path === '/admin' && adminStore.authenticated) {
+    next('/admin/dashboard')
+    return
+  }
+
+  if (isAdminRoute && !adminStore.authenticated) {
+    next('/admin')
+    return
+  }
+
+  if (to.path === '/admin/dashboard' && !adminStore.authenticated) {
+    next('/admin')
+    return
+  }
+
+  next()
+})
+
+export default router
