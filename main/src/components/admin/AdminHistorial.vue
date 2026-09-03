@@ -4,7 +4,7 @@ import { useOrdersStore } from '../../stores/orders'
 import { formatCurrency } from '../../utils/formatCurrency'
 
 const ordersStore = useOrdersStore()
-const { deliveredOrders } = storeToRefs(ordersStore)
+const { returnedOrders } = storeToRefs(ordersStore)
 
 function orderSubtotal(order) {
   return order.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
@@ -33,7 +33,7 @@ function orderTotal(order) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="order in deliveredOrders" :key="order.id" class="border-b border-pink-50 transition hover:bg-pink-50/50">
+          <tr v-for="order in returnedOrders" :key="order.id" class="border-b border-pink-50 transition hover:bg-pink-50/50">
             <td class="px-5 py-4 font-semibold">{{ order.id }}</td>
             <td class="px-5 py-4">{{ order.orderNumber }}</td>
             <td class="px-5 py-4">{{ order.customer?.name || 'N/A' }}</td>
@@ -43,7 +43,7 @@ function orderTotal(order) {
           </tr>
         </tbody>
       </table>
-      <p v-if="!deliveredOrders.length" class="p-10 text-center text-neutral-500">
+      <p v-if="!returnedOrders.length" class="p-10 text-center text-neutral-500">
         No hay pedidos entregados todavía.
       </p>
     </div>

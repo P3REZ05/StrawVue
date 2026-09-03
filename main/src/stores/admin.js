@@ -1,19 +1,15 @@
 import { defineStore } from 'pinia'
-import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 
-const sessionKey = 'strawberry-admin-session'
 const roleKey = 'strawberry-admin-role'
-
-const demoEmail = 'admin@strawberrymakeup.com'
-const demoPassword = 'strawberry2026'
-
 const masterAdminRole = 'super_admin'
 const allSections = ['productos', 'inventario', 'pedidos', 'historial', 'auditoria', 'configuracion']
 
 export const useAdminStore = defineStore('admin', {
   state: () => ({
-    authenticated: !isSupabaseConfigured && localStorage.getItem(sessionKey) === 'true',
-    role: localStorage.getItem(roleKey) || masterAdminRole
+    authenticated: false,
+    role: localStorage.getItem(roleKey) || masterAdminRole,
+    initialized: false
   }),
   actions: {
     hasAccess(section) {
@@ -22,8 +18,13 @@ export const useAdminStore = defineStore('admin', {
     getAllowedSections() {
       return allSections
     },
+
+    // Resuelve la sesión una sola vez por carga de página.
+    // Antes el guard del router llamaba a init() en CADA navegación,
+    // incluidas las públicas, disparando dos consultas de red por clic.
     async init() {
-      if (!isSupabaseConfigured || this.authenticated) return
+      if (this.initialized) return
+      this.initialized = true
 
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.user) return
@@ -36,53 +37,50 @@ export const useAdminStore = defineStore('admin', {
 
       if (profile) {
         this.authenticated = true
-        this.role = masterAdminRole
+        this.role = profile.role || masterAdminRole
         localStorage.setItem(roleKey, this.role)
+      } else {
+        // Usuario de Auth válido pero sin perfil admin: no es administrador.
+        await supabase.auth.signOut()
       }
     },
+
     async login(email = '', password = '') {
-      const normalizedEmail = (email || '').trim().toLowerCase()
-      const normalizedPassword = (password || '').trim()
+      const normalizedEmail = String(email || '').trim().toLowerCase()
+      const normalizedPassword = String(password || '').trim()
 
       if (!normalizedEmail || !normalizedPassword) {
         throw new Error('Ingresa usuario y contraseña para continuar.')
       }
 
-      if (isSupabaseConfigured) {
-        const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password: normalizedPassword })
-        if (error || !data.user) throw new Error('Credenciales inválidas.')
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password: normalizedPassword
+      })
+      if (error || !data.user) throw new Error('Credenciales inválidas.')
 
-        const { data: profile, error: profileError } = await supabase
-          .from('admin_profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .maybeSingle()
+      const { data: profile, error: profileError } = await supabase
+        .from('admin_profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .maybeSingle()
 
-        if (profileError || !profile) {
-          await supabase.auth.signOut()
-          throw new Error('Tu usuario no tiene un perfil admin autorizado.')
-        }
-
-        this.authenticated = true
-        this.role = masterAdminRole
-        localStorage.setItem(roleKey, this.role)
-        return
+      if (profileError || !profile) {
+        await supabase.auth.signOut()
+        throw new Error('Tu usuario no tiene un perfil admin autorizado.')
       }
 
-      if (normalizedEmail !== demoEmail || normalizedPassword !== demoPassword) {
-        throw new Error('Credenciales inválidas para el modo demo.')
-      }
-
-      localStorage.setItem(sessionKey, 'true')
-      localStorage.setItem(roleKey, masterAdminRole)
       this.authenticated = true
-      this.role = masterAdminRole
+      this.initialized = true
+      this.role = profile.role || masterAdminRole
+      localStorage.setItem(roleKey, this.role)
     },
+
     async logout() {
-      if (isSupabaseConfigured) await supabase.auth.signOut()
-      localStorage.removeItem(sessionKey)
+      await supabase.auth.signOut()
       localStorage.removeItem(roleKey)
       this.authenticated = false
+      this.initialized = true
       this.role = masterAdminRole
     }
   }

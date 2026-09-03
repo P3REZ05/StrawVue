@@ -13,7 +13,7 @@ const added = ref(false)
 const selectedVariant = ref(null)
 
 onMounted(() => {
-  inventoryStore.init()
+  inventoryStore.init().catch(() => {})
 })
 
 const product = computed(() => inventoryStore.catalogWithStock.find((item) => item.id === Number(route.params.id)))

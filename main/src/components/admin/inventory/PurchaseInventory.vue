@@ -1,11 +1,12 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useInventoryStore } from '../../../stores/inventory'
 import { formatCurrency } from '../../../utils/formatCurrency'
 
 const inventory = useInventoryStore()
 const { catalog } = storeToRefs(inventory)
+const categories = computed(() => inventory.categories.filter((category) => !category.parentId && category.active !== false))
 
 const showModal = ref(false)
 const editMode = ref(false)
@@ -47,7 +48,6 @@ function handleSubmit() {
       category: form.value.category,
       description: form.value.description,
       price: 0,
-      stock: 0,
       image: '',
       active: true
     })
@@ -149,13 +149,15 @@ function closeModal() {
                 </div>
                 <div>
                   <label class="mb-1 block text-sm font-bold text-neutral-700" for="p-category">Categoría:</label>
-                  <input
+                    <select
                     id="p-category"
                     v-model="form.category"
-                    type="text"
+                      required
                     class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-pink-100"
-                    placeholder="Ej: Bases, Labios, Sombras..."
-                  />
+                    >
+                      <option value="">Seleccionar categoría</option>
+                      <option v-for="category in categories" :key="category.id" :value="category.name">{{ category.name }}</option>
+                    </select>
                 </div>
                 <div>
                   <label class="mb-1 block text-sm font-bold text-neutral-700" for="p-description">Descripción:</label>

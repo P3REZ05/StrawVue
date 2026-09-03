@@ -1,46 +1,38 @@
 import { defineStore } from 'pinia'
 import { supabase } from '../lib/supabase'
-import { products as mockProducts } from '../data/mockData'
+import { logAudit } from '../lib/auditLog'
 
 export const useInventoryStore = defineStore('inventory', {
   state: () => ({
-    // Catálogo maestro: productos base creados en inventario de compras
-    catalog: [...mockProducts],
+    // Catálogo maestro. Vacío hasta que init() lo cargue desde Supabase:
+    // antes arrancaba con datos mock y, si la carga fallaba, el admin
+    // administraba productos ficticios sin enterarse.
+    catalog: [],
     variants: [],
     suppliers: [],
+    categories: [],
+    brands: [],
+    skinTypes: [],
+    finishes: [],
+    coverages: [],
     movements: [],
     balances: [],
 
     // Órdenes de compra: entradas al almacén
-    purchaseOrders: [
-      { id: 1, orderNumber: 'PC-001', supplier: 'Distribuidora Maquillaje SAS', date: '2026-08-10', notes: '', items: [
-        { productId: 1, quantity: 10, toSale: 5 },
-        { productId: 3, quantity: 10, toSale: 2 }
-      ] },
-      { id: 2, orderNumber: 'PC-002', supplier: 'CosmeticImport', date: '2026-08-12', notes: 'Segunda compra', items: [
-        { productId: 2, quantity: 5, toSale: 5 }
-      ] }
-    ],
+    purchaseOrders: [],
 
-    // Inventario de venta: productos con stock listo para vender
-    saleInventory: [
-      { id: 1, productId: 1, quantity: 5, costPrice: 18000 },
-      { id: 2, productId: 2, quantity: 3, costPrice: 22000 },
-      { id: 3, productId: 3, quantity: 8, costPrice: 12000 }
-    ],
+    // Inventario de venta (derivado de inventory_movements)
+    saleInventory: [],
 
-    // Almacén / bodega: productos comprados que aún no están a la venta
-    warehouse: [
-      { id: 1, productId: 1, quantity: 2, costPrice: 15000 }
-    ],
+    // Bodega (derivada de inventory_movements)
+    warehouse: [],
 
     // Ventas físicas realizadas
-    sales: [
-      { id: 1, date: '2026-08-15', items: [{ productId: 1, quantity: 3, price: 38900 }], total: 116700, paymentMethod: 'efectivo' }
-    ],
+    sales: [],
 
     // Estado de carga
     loading: false,
+    error: null,
     initialized: false
   }),
 
@@ -84,15 +76,15 @@ export const useInventoryStore = defineStore('inventory', {
   },
 
   actions: {
+    // `balances` viene de la vista inventory_balances: `saleStock` YA ES el
+    // stock disponible para vender (entradas a venta menos salidas), no una
+    // reserva. La versión anterior hacía `variant.stock - balance.saleStock`,
+    // restando el disponible de una columna legacy que casi siempre vale 0.
+    // El resultado era 0 para todo, así que validateOrderItems rechazaba
+    // cualquier pedido antes de llegar a Supabase.
     getVariantAvailableStock(variantId) {
-      const variant = this.variants.find((item) => item.id === variantId)
-      if (!variant) return 0
-
-      const baseStock = Number(variant.stock) || 0
       const balance = this.balances.find((row) => row.variantId === variantId)
-      const reservedStock = balance ? Number(balance.saleStock) || 0 : 0
-
-      return Math.max(baseStock - reservedStock, 0)
+      return Math.max(Number(balance?.saleStock) || 0, 0)
     },
 
     getProductAvailableStock(productId, variantId = null) {
@@ -100,17 +92,14 @@ export const useInventoryStore = defineStore('inventory', {
         return this.getVariantAvailableStock(variantId)
       }
 
+      // Si el producto tiene variantes, el disponible es la suma de ellas.
       const variants = this.variants.filter((variant) => variant.productId === productId && variant.isActive !== false)
       if (variants.length) {
         return variants.reduce((total, variant) => total + this.getVariantAvailableStock(variant.id), 0)
       }
 
-      const product = this.catalog.find((item) => item.id === productId)
-      const fallbackStock = Number(product?.stock ?? 0) || 0
       const balance = this.balances.find((row) => row.productId === productId && !row.variantId)
-      const reservedStock = balance ? Number(balance.saleStock) || 0 : 0
-
-      return Math.max(fallbackStock - reservedStock, 0)
+      return Math.max(Number(balance?.saleStock) || 0, 0)
     },
 
     validateOrderItems(items) {
@@ -142,15 +131,59 @@ export const useInventoryStore = defineStore('inventory', {
       return { valid: issues.length === 0, issues }
     },
 
+    // Reingresa el stock de un pedido devuelto.
+    //
+    // Antes esto hacía DELETE sobre inventory_movements, borrando la salida
+    // original. Eso rompía el principio central del proyecto: el stock se
+    // deriva del historial, y un historial que se puede borrar no sirve como
+    // fuente de verdad ni como auditoría.
+    //
+    // Ahora la base inserta un movimiento 'return' compensatorio y el
+    // historial queda completo: se ve que salió y que volvió.
     async releaseOrderStock(orderId) {
-      const { error } = await supabase
-        .from('inventory_movements')
-        .delete()
-        .eq('reference_type', 'order')
-        .eq('reference_id', orderId)
-        .eq('movement_type', 'online_order')
+      const { error } = await supabase.rpc('return_order_stock', { p_order_id: orderId })
+      if (error) throw new Error('No se pudo reingresar el stock de la devolución.')
+      await this.refreshBalances()
+    },
 
-      if (error) throw new Error('No se pudo liberar la reserva del stock.')
+    // Relee los saldos derivados de inventory_movements.
+    async refreshBalances() {
+      const { data, error } = await supabase.from('inventory_balances').select('*')
+      if (error) {
+        console.error('No se pudieron refrescar los saldos de inventario:', error.message)
+        return false
+      }
+
+      this.balances = (data || []).map((balance) => ({
+        productId: balance.product_id,
+        variantId: balance.variant_id,
+        warehouseStock: Number(balance.warehouse_stock) || 0,
+        saleStock: Number(balance.sale_stock) || 0
+      }))
+      this.syncDerivedInventory()
+      return true
+    },
+
+    // Proyecta `balances` sobre las listas que consumen los componentes.
+    syncDerivedInventory() {
+      this.saleInventory = this.balances
+        .filter((balance) => balance.saleStock > 0)
+        .map((balance, index) => ({
+          id: `balance-sale-${index}`,
+          productId: balance.productId,
+          variantId: balance.variantId,
+          quantity: balance.saleStock,
+          costPrice: 0
+        }))
+      this.warehouse = this.balances
+        .filter((balance) => balance.warehouseStock > 0)
+        .map((balance, index) => ({
+          id: `balance-warehouse-${index}`,
+          productId: balance.productId,
+          variantId: balance.variantId,
+          quantity: balance.warehouseStock,
+          costPrice: 0
+        }))
     },
 
     // ================================================
@@ -172,11 +205,20 @@ export const useInventoryStore = defineStore('inventory', {
             id: p.id,
             name: p.name,
             category: p.category,
+            categoryId: p.category_id,
             description: p.description || '',
             price: Number(p.price) || 0,
             salePrice: p.sale_price ? Number(p.sale_price) : undefined,
             originalPrice: p.original_price ? Number(p.original_price) : undefined,
             image: p.image || '',
+            brandId: p.brand_id,
+            skinTypeId: p.skin_type_id,
+            finishId: p.finish_id,
+            coverageId: p.coverage_id,
+            isFeatured: p.is_featured === true,
+            isNew: p.is_new !== false,
+            isRecommended: p.is_recommended === true,
+            status: p.status || 'active',
             active: p.active !== false,
             saleStock: 0,
             warehouseStock: 0
@@ -214,6 +256,26 @@ export const useInventoryStore = defineStore('inventory', {
           this.suppliers = suppliers
         }
 
+        const dynamicTables = [
+          ['categories', 'categories'],
+          ['brands', 'brands'],
+          ['skin_types', 'skinTypes'],
+          ['finishes', 'finishes'],
+          ['coverages', 'coverages']
+        ]
+        for (const [table, stateKey] of dynamicTables) {
+          const { data, error } = await supabase.from(table).select('*').eq('active', true).order('name')
+          if (!error && data?.length) {
+            this[stateKey] = data.map((option) => ({
+              id: option.id,
+              name: option.name,
+              image: option.image,
+              parentId: option.parent_id,
+              active: option.active !== false
+            }))
+          }
+        }
+
         const { data: movements, error: movementsError } = await supabase
           .from('inventory_movements')
           .select('*')
@@ -233,38 +295,12 @@ export const useInventoryStore = defineStore('inventory', {
             createdAt: movement.created_at
           }))
 
-          const { data: saleBalances, error: saleBalancesError } = await supabase
-            .from('inventory_sale_balances')
-            .select('*')
-
-          if (!saleBalancesError && saleBalances?.length) {
-            this.balances = saleBalances.map((balance) => ({
-              productId: balance.product_id,
-              variantId: balance.variant_id,
-              warehouseStock: 0,
-              saleStock: Number(balance.sale_stock) || 0
-            }))
-          }
-
-          const { data: balances, error: balancesError } = await supabase.from('inventory_balances').select('*')
-          if (!balancesError && balances?.length) {
-            this.balances = balances.map((balance) => ({
-              productId: balance.product_id,
-              variantId: balance.variant_id,
-              warehouseStock: Number(balance.warehouse_stock) || 0,
-              saleStock: Number(balance.sale_stock) || 0
-            }))
-          }
         }
 
-        if (this.balances.length) {
-          this.saleInventory = this.balances
-            .filter((balance) => balance.saleStock > 0)
-            .map((balance, index) => ({ id: `balance-sale-${index}`, productId: balance.productId, variantId: balance.variantId, quantity: balance.saleStock, costPrice: 0 }))
-          this.warehouse = this.balances
-            .filter((balance) => balance.warehouseStock > 0)
-            .map((balance, index) => ({ id: `balance-warehouse-${index}`, productId: balance.productId, variantId: balance.variantId, quantity: balance.warehouseStock, costPrice: 0 }))
-        }
+        // Los saldos se cargan SIEMPRE, no solo cuando ya hay movimientos:
+        // antes esta consulta vivía dentro del `if (movements?.length)`, así
+        // que en una base recién migrada `balances` quedaba vacío.
+        await this.refreshBalances()
 
         // Cargar órdenes de compra
         const { data: orders, error: ordersError } = await supabase
@@ -275,14 +311,17 @@ export const useInventoryStore = defineStore('inventory', {
           this.purchaseOrders = orders.map((order) => ({
             id: order.id,
             orderNumber: order.order_number,
-            supplier: order.supplier,
-            date: order.date,
+            supplierId: order.supplier_id,
+            date: order.order_date,
             notes: order.notes || '',
+            status: order.status,
+            total: Number(order.total) || 0,
             items: (order.purchase_order_items || []).map((item) => ({
               productId: item.product_id,
+              variantId: item.variant_id,
               quantity: item.quantity,
-              costPrice: Number(item.cost_price) || 0,
-              toSale: item.to_sale
+              costPrice: Number(item.unit_cost) || 0,
+              destination: item.destination || 'warehouse'
             }))
           }))
         }
@@ -308,7 +347,9 @@ export const useInventoryStore = defineStore('inventory', {
 
         this.initialized = true
       } catch (error) {
+        this.error = error.message || 'No se pudo cargar el inventario.'
         console.error('Error inicializando inventario desde Supabase:', error)
+        throw error
       } finally {
         this.loading = false
       }
@@ -331,6 +372,17 @@ export const useInventoryStore = defineStore('inventory', {
           sale_price: product.salePrice || null,
           original_price: product.originalPrice || null,
           image: product.image || '',
+          net_content_ml: product.netContentMl || null,
+          brand_id: product.brandId || null,
+          category_id: product.categoryId || null,
+          subcategory_id: product.subcategoryId || null,
+          skin_type_id: product.skinTypeId || null,
+          finish_id: product.finishId || null,
+          coverage_id: product.coverageId || null,
+          is_featured: product.isFeatured === true,
+          is_new: product.isNew !== false,
+          is_recommended: product.isRecommended === true,
+          status: product.status || (product.active === false ? 'paused' : 'active'),
           active: product.active !== false
         })
         .select()
@@ -338,6 +390,9 @@ export const useInventoryStore = defineStore('inventory', {
 
       if (error) {
         console.error('Error al crear producto en Supabase:', error)
+        if (error.code === '42501' || error.status === 403) {
+          throw new Error('Supabase rechazó la operación. Verifica que tu usuario tenga un perfil en admin_profiles y que la sesión esté activa.')
+        }
         // Fallback local
         this.catalog.push({ id, ...product })
         return id
@@ -352,6 +407,16 @@ export const useInventoryStore = defineStore('inventory', {
         salePrice: data.sale_price ? Number(data.sale_price) : undefined,
         originalPrice: data.original_price ? Number(data.original_price) : undefined,
         image: data.image || '',
+        brandId: data.brand_id,
+        categoryId: data.category_id,
+        subcategoryId: data.subcategory_id,
+        skinTypeId: data.skin_type_id,
+        finishId: data.finish_id,
+        coverageId: data.coverage_id,
+        isFeatured: data.is_featured === true,
+        isNew: data.is_new !== false,
+        isRecommended: data.is_recommended === true,
+        status: data.status || 'active',
         active: data.active !== false
       }
       this.catalog.push(newProduct)
@@ -372,6 +437,16 @@ export const useInventoryStore = defineStore('inventory', {
       if (updates.originalPrice !== undefined) supabaseUpdates.original_price = updates.originalPrice
       if (updates.image !== undefined) supabaseUpdates.image = updates.image
       if (updates.active !== undefined) supabaseUpdates.active = updates.active
+      if (updates.brandId !== undefined) supabaseUpdates.brand_id = updates.brandId || null
+      if (updates.categoryId !== undefined) supabaseUpdates.category_id = updates.categoryId || null
+      if (updates.subcategoryId !== undefined) supabaseUpdates.subcategory_id = updates.subcategoryId || null
+      if (updates.skinTypeId !== undefined) supabaseUpdates.skin_type_id = updates.skinTypeId || null
+      if (updates.finishId !== undefined) supabaseUpdates.finish_id = updates.finishId || null
+      if (updates.coverageId !== undefined) supabaseUpdates.coverage_id = updates.coverageId || null
+      if (updates.isFeatured !== undefined) supabaseUpdates.is_featured = updates.isFeatured
+      if (updates.isNew !== undefined) supabaseUpdates.is_new = updates.isNew
+      if (updates.isRecommended !== undefined) supabaseUpdates.is_recommended = updates.isRecommended
+      if (updates.status !== undefined) supabaseUpdates.status = updates.status
 
       const { error } = await supabase
         .from('products')
@@ -379,6 +454,55 @@ export const useInventoryStore = defineStore('inventory', {
         .eq('id', productId)
 
       if (error) console.error('Error al actualizar producto en Supabase:', error)
+    },
+
+    async saveCatalogOption(type, option) {
+      const tableMap = {
+        brands: 'brands',
+        skinTypes: 'skin_types',
+        finishes: 'finishes',
+        coverages: 'coverages'
+      }
+      const table = tableMap[type]
+      if (!table || !option.name?.trim()) throw new Error('El nombre es obligatorio.')
+
+      const target = this[type]
+      if (option.id && typeof option.id === 'number') {
+        const { data, error } = await supabase.from(table).update({ name: option.name.trim(), active: option.active !== false }).eq('id', option.id).select().single()
+        if (error) throw new Error('No se pudo actualizar la opción.')
+        const index = target.findIndex((item) => item.id === option.id)
+        if (index !== -1) target[index] = { ...target[index], name: data.name, active: data.active }
+        return target[index]
+      }
+
+      const localOption = { id: `local-${Date.now()}`, name: option.name.trim(), active: true }
+      if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        const { data, error } = await supabase.from(table).insert({ name: localOption.name, active: true }).select().single()
+        if (error) throw new Error('No se pudo crear la opción.')
+        localOption.id = data.id
+      }
+      target.push(localOption)
+      return localOption
+    },
+
+    async saveCategory(category) {
+      if (!category.name?.trim()) throw new Error('El nombre es obligatorio.')
+      const payload = { name: category.name.trim(), image: category.image || null, parent_id: category.parentId || null, active: category.active !== false }
+      if (category.id && typeof category.id === 'number') {
+        const { data, error } = await supabase.from('categories').update(payload).eq('id', category.id).select().single()
+        if (error) throw new Error('No se pudo actualizar la categoría.')
+        const index = this.categories.findIndex((item) => item.id === category.id)
+        if (index !== -1) this.categories[index] = { ...this.categories[index], ...data, parentId: data.parent_id }
+        return this.categories[index]
+      }
+      const localCategory = { id: `local-${Date.now()}`, ...category, name: category.name.trim(), active: true }
+      if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        const { data, error } = await supabase.from('categories').insert(payload).select().single()
+        if (error) throw new Error('No se pudo crear la categoría.')
+        localCategory.id = data.id
+      }
+      this.categories.push(localCategory)
+      return localCategory
     },
 
     async addVariant(productId, variant) {
@@ -391,7 +515,7 @@ export const useInventoryStore = defineStore('inventory', {
         optionValue: variant.optionValue || variant.name,
         price: Number(variant.price) || 0,
         compareAtPrice: Number(variant.compareAtPrice) || 0,
-        stock: Number(variant.stock) || 0,
+        stock: 0,
         isActive: true
       }
 
@@ -463,7 +587,10 @@ export const useInventoryStore = defineStore('inventory', {
 
       if (supplier.id && typeof supplier.id === 'number' && import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
         const { data, error } = await supabase.from('suppliers').update(payload).eq('id', supplier.id).select().single()
-        if (error) throw new Error('No se pudo actualizar el proveedor.')
+        if (error) {
+          if (error.code === '42501' || error.status === 403) throw new Error('Supabase rechazó la operación. Verifica tu sesión y que tu usuario exista en admin_profiles.')
+          throw new Error('No se pudo actualizar el proveedor.')
+        }
         const index = this.suppliers.findIndex((item) => item.id === supplier.id)
         if (index !== -1) this.suppliers[index] = data
         return data
@@ -477,7 +604,11 @@ export const useInventoryStore = defineStore('inventory', {
 
       if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
         const { data, error } = await supabase.from('suppliers').insert(payload).select().single()
-        if (error) throw new Error('No se pudo crear el proveedor.')
+        if (error) {
+            console.error('Error al crear proveedor en Supabase:', error)
+          if (error.code === '42501' || error.status === 403) throw new Error('Supabase rechazó la operación. Verifica tu sesión y que tu usuario exista en admin_profiles.')
+          throw new Error('No se pudo crear el proveedor.')
+        }
         this.suppliers.push(data)
         return data
       }
@@ -764,11 +895,13 @@ export const useInventoryStore = defineStore('inventory', {
       if (error) console.error('Error al actualizar precio en Supabase:', error)
 
       if (!error && previousPrice !== salePrice) {
-        await supabase.from('audit_logs').insert({
-          entity_type: 'product',
-          entity_id: productId,
-          action: 'price_changed',
-          details: { from: previousPrice, to: salePrice }
+        await logAudit({
+          table: 'products',
+          recordId: productId,
+          action: 'PRICE_CHANGED',
+          oldData: { price: previousPrice },
+          newData: { price: salePrice },
+          note: 'Precio de venta actualizado desde el panel'
         })
       }
     },
@@ -800,10 +933,6 @@ export const useInventoryStore = defineStore('inventory', {
 
       const id = this.sales.length ? Math.max(...this.sales.map((s) => s.id)) + 1 : 1
       this.sales.push({ id, ...saleData })
-
-      if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-        return id
-      }
 
       const { data, error } = await supabase
         .from('sales')
@@ -847,11 +976,12 @@ export const useInventoryStore = defineStore('inventory', {
         notes: 'Salida por venta física'
       })))
 
-      await supabase.from('audit_logs').insert({
-        entity_type: 'sale',
-        entity_id: data.id,
-        action: 'created',
-        details: { total: saleData.total, items: saleData.items.length }
+      await logAudit({
+        table: 'sales',
+        recordId: data.id,
+        action: 'POS_SALE_CREATED',
+        newData: { total: saleData.total, items: saleData.items.length },
+        note: 'Venta física registrada desde el panel'
       })
 
       return data.id

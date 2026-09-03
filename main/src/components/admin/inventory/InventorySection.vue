@@ -3,21 +3,18 @@ import { ref } from 'vue'
 import {
   Boxes,
   ShoppingCart,
-  Store,
-  BadgeDollarSign
+  Store
 } from 'lucide-vue-next'
 import PurchaseInventory from './PurchaseInventory.vue'
 import PurchaseOrders from './PurchaseOrders.vue'
 import SaleInventory from './SaleInventory.vue'
-import SalesRegister from './SalesRegister.vue'
 
 const activeTab = ref('purchase-inventory')
 
 const tabs = [
   { id: 'purchase-inventory', label: 'Inventario de Compras', icon: Boxes },
   { id: 'purchases', label: 'Compras', icon: ShoppingCart },
-  { id: 'sale-inventory', label: 'Inventario de Venta', icon: Store },
-  { id: 'sales', label: 'Ventas', icon: BadgeDollarSign }
+  { id: 'sale-inventory', label: 'Inventario de Venta', icon: Store }
 ]
 </script>
 
@@ -25,7 +22,7 @@ const tabs = [
   <div class="space-y-6">
     <div>
       <h2 class="text-2xl font-bold text-black">Inventario</h2>
-      <p class="mt-1 text-sm text-neutral-500">Gestiona el catálogo, compras, inventario de venta y ventas físicas.</p>
+      <p class="mt-1 text-sm text-neutral-500">Gestiona bodega, compras e inventario disponible para venta.</p>
     </div>
 
     <!-- Tabs -->
@@ -45,6 +42,5 @@ const tabs = [
     <PurchaseInventory v-if="activeTab === 'purchase-inventory'" />
     <PurchaseOrders v-else-if="activeTab === 'purchases'" />
     <SaleInventory v-else-if="activeTab === 'sale-inventory'" />
-    <SalesRegister v-else />
   </div>
 </template>

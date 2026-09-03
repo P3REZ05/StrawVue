@@ -106,7 +106,7 @@ function closeModal() {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="w-full space-y-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 class="text-2xl font-bold text-black">Ventas (POS Físico)</h2>

@@ -37,33 +37,52 @@ Esto es más sólido y profesional que vender solo desde un carrito visual sin c
 
 ## 3. Módulos del proyecto
 
-### 3.1 Módulo de catálogo
+### 3.1 Módulo de gestión de productos
 
-Responsable de todo lo relacionado con los productos que la marca vende.
+Será el módulo principal para organizar el catálogo y el inventario comercial. Agrupará las siguientes secciones:
+
+- Productos
+- Variantes
+- Inventario de compras / bodega
+- Compras
+- Inventario de venta
+- Categorías y atributos
+
+Las ventas físicas/POS, pedidos online, pagos, envíos, reportes y auditoría permanecen como módulos independientes.
+
+#### Productos
+
+Responsable únicamente de la ficha comercial. No debe recibir ni modificar existencias.
 
 Debe incluir:
 
 - nombre del producto
-- marca
-- categoría
-- tipo de piel (solo aplica a skincare)
-- acabado (ej. mate, satinado, brillante, fijador)
-- cobertura (ej. ligera, media, alta, full coverage)
-- contenido neto (solo aplica líquidos)
+- marca dinámica
+- categoría y subcategoría dinámicas
+- tipo de piel dinámico, habilitado solo para la categoría Cuidado facial
+- acabado dinámico, habilitado para bases, fijadores, labiales y correctores
+- cobertura dinámica, habilitada para bases
+- contenido neto, habilitado para productos líquidos
 - código de barras
 - producto destacado
 - producto nuevo
 - producto recomendado
-- estado de publicación
+- estado de publicación: borrador, activo, pausado o archivado
 - descripción
 - imagen principal
 - imágenes adicionales
 - precio base
 - precio promocional
-- SKU / referencia interna
+- SKU / referencia interna cuando corresponda a la variante
 - activo / pausado / archivado
 
-Recomendación: separar el producto de las variantes.
+Los campos de tipo de piel, acabado, cobertura y contenido neto se mostrarán mediante una opción de activación en el formulario. Al marcarla, se habilitará el selector dinámico correspondiente; al desmarcarla, el campo no aplicará al producto y deberá quedar vacío.
+
+`Producto nuevo`, `Producto destacado` y `Producto recomendado` son opciones independientes y editables. Todo producto puede comenzar como nuevo, pero el administrador puede desactivar esa marca posteriormente.
+
+#### Variantes
+
+Las variantes se gestionarán en un módulo independiente del formulario principal del producto. Allí se crearán tonos, tamaños o referencias con su SKU, código de barras y precio propio cuando corresponda. Las variantes no serán la fuente de verdad del stock: el inventario se calculará mediante movimientos.
 
 Ejemplo:
 
@@ -74,7 +93,22 @@ Ejemplo:
 
 Esto es importante porque en maquillaje casi siempre hay tonos, pigments y referencias distintas.
 
-### 3.2 Módulo de proveedores
+### 3.2 Módulo de categorías y atributos
+
+Este será un mini módulo dinámico dentro de Gestión de productos. Permitirá crear, editar, activar, pausar y almacenar:
+
+- categorías
+- subcategorías
+- marcas
+- tipos de piel
+- acabados
+- coberturas
+
+Los productos utilizarán selectores alimentados por estas tablas. Así se evita escribir valores manualmente y se pueden agregar opciones sin modificar el código.
+
+Las categorías controlarán qué atributos aparecen en el formulario de producto. Por ejemplo, tipo de piel solo se habilitará para Cuidado facial; cobertura solo para Bases; y acabado solo para Bases, Fijadores, Labiales y Correctores.
+
+### 3.3 Módulo de proveedores
 
 Debe manejar la compra de productos a distribuidores o marcas.
 
@@ -93,7 +127,7 @@ Campos recomendados:
 
 Esto sirve para construir un historial de compras y entender qué proveedor entrega más volumen, cuál tarda más, etc.
 
-### 3.3 Módulo de compras
+### 3.4 Módulo de compras
 
 Responsable de registrar las compras de productos a proveedores.
 
@@ -110,7 +144,7 @@ Esto aplica para la regla que ya definiste:
 - todo entra primero a bodega
 - luego se decide si pasa a inventario de venta
 
-### 3.4 Módulo de bodega/inventario
+### 3.5 Módulo de bodega/inventario
 
 Tener bodega y venta es una buena decisión, porque evita vender sin control.
 
@@ -128,7 +162,7 @@ Regla de negocio:
 - Si un producto se vende, se descuenta de la venta.
 - Si se retorna, se devuelve al inventario correcto.
 
-### 3.5 Módulo de ventas online
+### 3.6 Módulo de ventas online
 
 Es donde ocurre el pedido del cliente.
 
@@ -151,7 +185,7 @@ Debe manejar:
 
 Además, la compra debe registrarse antes de abrir el WhatsApp, para que quede trazable. El WhatsApp debe ser un canal de coordinación, no la única fuente de verdad.
 
-### 3.6 Módulo de ventas físicas / POS
+### 3.7 Módulo de ventas físicas / POS
 
 Esto es útil si quieres vender en tienda o en eventos.
 
@@ -167,7 +201,7 @@ Debe registrar:
 
 Esto tiene sentido para diferenciar ventas online vs venta presencial.
 
-### 3.7 Módulo de pedidos y seguimiento
+### 3.8 Módulo de pedidos y seguimiento
 
 Estados recomendados:
 
@@ -187,7 +221,7 @@ Regla recomendada:
 - No debe poder acceder a todo el panel de pedidos.
 - La persona recibe un link de seguimiento o una respuesta por WhatsApp.
 
-### 3.8 Módulo de pagos
+### 3.9 Módulo de pagos
 
 Debe evaluar el tipo de pago y comprobante.
 
@@ -204,7 +238,7 @@ Campos recomendados:
 - created_at
 - updated_at
 
-### 3.9 Módulo de envío
+### 3.10 Módulo de envío
 
 Aunque la transportadora calcula el valor final, tu sistema debe guardar:
 
@@ -220,7 +254,7 @@ Aunque la transportadora calcula el valor final, tu sistema debe guardar:
 
 Esto permite controlar la logística y preparar el pedido adecuadamente.
 
-### 3.10 Módulo de promociones
+### 3.11 Módulo de promociones
 
 Para la marca de maquillaje es importante porque ayuda a mover volumen y a generar más ventas.
 
@@ -245,7 +279,7 @@ Ejemplos:
 - Envío gratis en compras mayores a cierto valor
 - Combo skincare + base
 
-### 3.11 Módulo de administración y seguridad
+### 3.12 Módulo de administración y seguridad
 
 La mejor práctica es usar Supabase Auth en lugar de crear tu propio sistema con password_hash en la app.
 
@@ -261,7 +295,7 @@ Modelo operativo definido:
 
 Este enfoque es intencional: facilita la operación inicial, reduce errores de permisos y deja el sistema estable antes de abrir más perfiles. Si más adelante se requiere, se puede ampliar a roles, pero no como base inicial.
 
-### 3.12 Módulo de auditoría
+### 3.13 Módulo de auditoría
 
 Esto es clave para la operación y para tu decisión de que necesitas historial.
 
@@ -277,7 +311,7 @@ Cada cambio importante debe quedar en una tabla de auditoría:
 
 No solo sirve para control interno, sino para resolver dudas con proveedores, clientes y ventas.
 
-### 3.13 Estado actual del proyecto y sprint operativo
+### 3.14 Estado actual del proyecto y sprint operativo
 
 El proyecto ya dejó de ser solo una vitrina visual y pasó a una etapa de operación real. La base funcional ya está construida alrededor de un modelo de negocio más serio para maquillaje y skincare:
 
@@ -368,6 +402,97 @@ Para que todo quede ordenado, sigue esta lógica:
 8. Cada movimiento queda guardado en `inventory_movements`.
 
 Esto permite saber en todo momento qué pasó y por qué.
+
+### 4.3 Cambios aprobados para Supabase
+
+Sí, es necesario actualizar Supabase para que el nuevo flujo no dependa de valores escritos manualmente.
+
+#### Tablas maestras dinámicas
+
+Se conservará `categories` y se ampliará el modelo con una relación padre para subcategorías. También se crearán tablas maestras para `brands`, `skin_types`, `finishes` y `coverages`.
+
+La tabla `products` deberá guardar referencias a estas tablas mediante identificadores, en lugar de depender únicamente de textos libres. Se recomienda conservar temporalmente los campos de texto actuales durante la migración, copiar sus valores a las tablas maestras y retirarlos después de validar el frontend.
+
+El modelo objetivo será:
+
+```text
+categories
+  └── subcategories
+brands
+skin_types
+finishes
+coverages
+      ↓
+products
+      ↓
+product_variants
+```
+
+#### Existencias fuera del catálogo
+
+`products` no tendrá `stock`. El esquema V2 ya no define esa columna, por lo que el campo Stock del formulario de Productos debe eliminarse del frontend.
+
+`product_variants.stock` todavía existe en el esquema y en el store, pero contradice la fuente de verdad basada en movimientos. Debe tratarse como campo legacy: primero se dejará de editarlo desde la interfaz, después se migrarán sus valores iniciales a movimientos y finalmente se eliminará cuando no existan dependencias.
+
+La cantidad disponible se derivará de `inventory_movements`:
+
+- `purchase` positivo: entrada a bodega.
+- `transfer` negativo con referencia `warehouse`: salida de bodega.
+- `transfer` positivo con referencia `sale_inventory`: entrada a venta.
+- `sale` o `online_order` negativo: salida por venta.
+- `return` positivo: reingreso según el destino definido.
+
+#### Flujo de compra y transferencia
+
+Toda compra recibida debe crear un movimiento `purchase` hacia bodega. No se debe permitir que una compra salte directamente al inventario de venta.
+
+Cuando el administrador decida publicar unidades para venta, se ejecutará una transferencia con dos movimientos relacionados: salida de bodega y entrada a inventario de venta. La cantidad puede ser parcial. Las unidades no transferidas permanecen almacenadas y no aparecen disponibles en el storefront.
+
+#### Migración SQL prevista
+
+La actualización de Supabase deberá incluir, como mínimo:
+
+```sql
+create table if not exists public.brands (
+  id bigint generated always as identity primary key,
+  name text unique not null,
+  active boolean not null default true,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.skin_types (
+  id bigint generated always as identity primary key,
+  name text unique not null,
+  active boolean not null default true,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.finishes (
+  id bigint generated always as identity primary key,
+  name text unique not null,
+  active boolean not null default true,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.coverages (
+  id bigint generated always as identity primary key,
+  name text unique not null,
+  active boolean not null default true,
+  created_at timestamptz default now()
+);
+
+alter table public.categories
+  add column if not exists parent_id bigint references public.categories(id) on delete restrict;
+
+alter table public.products
+  add column if not exists brand_id bigint references public.brands(id) on delete restrict,
+  add column if not exists subcategory_id bigint references public.categories(id) on delete restrict,
+  add column if not exists skin_type_id bigint references public.skin_types(id) on delete restrict,
+  add column if not exists finish_id bigint references public.finishes(id) on delete restrict,
+  add column if not exists coverage_id bigint references public.coverages(id) on delete restrict;
+```
+
+Este bloque crea la estructura, pero no elimina todavía los campos antiguos ni `product_variants.stock`. La migración de datos y la eliminación de legacy deben hacerse después de adaptar el frontend y verificar los registros existentes.
 
 ---
 
@@ -1056,17 +1181,22 @@ El proyecto ya dejó de ser una propuesta visual y está avanzando hacia un ecom
 - La base de datos fue organizada con una lógica de verdad: catálogo, variantes, compras, inventario por movimientos y pedidos transaccionales.
 - Las políticas RLS principales están definidas para separar lectura pública (storefront) y operaciones administrativas (panel).
 - El catálogo usa el store de inventario y muestra stock público derivado de movimientos (`inventory_sale_balances`).
-- El panel de productos y el inventario usan el mismo store para crear/editar/pausar/eliminar productos y variantes.
+- El panel de productos y el inventario usan el mismo store para crear/editar/pausar productos; las variantes ahora se gestionan desde un módulo independiente.
 - Variantes activas se cargan para cada producto; la vista de detalle exige selección de variante (tono/referencia) y aplica el límite de cantidad por variante.
-- El panel admin permite crear, desactivar y editar variantes (nombre, SKU, precio, stock) desde el flujo de edición del producto.
+- El panel admin permite crear y desactivar variantes (nombre, SKU y precio) desde el módulo independiente de Variantes; las existencias no se editan desde esa pantalla.
 - El panel de inventario permite registrar órdenes de compra (supplier, variante, cantidad, costo) e ingresa stock a bodega como movimientos `purchase`.
 - Las transferencias de bodega a venta generan movimientos `transfer` (salida negativa de bodega y entrada positiva a venta).
-- Las ventas físicas generan movimientos `sale` y los pedidos online generan movimientos `online_order` (mediante triggers cuando se insertan los items del pedido).
+- Las ventas físicas generan movimientos `sale` y los pedidos online generan movimientos `online_order` mediante la RPC atómica `create_order_with_stock()`.
 - El flujo principal usa `inventory_movements` y las vistas de saldos derivadas, pero `src/stores/inventory.js` todavía conserva código legacy que consulta o escribe `sale_inventory` y `purchase_inventory`; esas tablas no forman parte del esquema V2 actual.
 - El acceso del panel utiliza Supabase Auth cuando las variables están configuradas y la sesión se restaura antes de proteger rutas.
 - El carrito limita las cantidades según stock por variante y bloquea productos agotados en el storefront.
 - Existe auditoría para variantes, productos e inventario mediante `main/supabase/add_audit_logs.sql`, pero ese archivo reemplaza el contrato de `audit_logs` definido en `schema.sql`; ambos SQL deben consolidarse antes de ejecutar una instalación limpia.
 - El panel admin ya incluye la vista de auditoría y lectura de logs.
+- La tabla `categories` ya existe y ahora tiene un mini módulo dinámico para administrar categorías y subcategorías.
+- Ya se creó `product_catalog_migration.sql` con tablas maestras, relaciones e índices para categorías, subcategorías, marcas, tipos de piel, acabados y coberturas; todavía falta ejecutarlo en Supabase.
+- Se creó el módulo administrativo de Categorías y atributos y el módulo independiente de Variantes.
+- El formulario de alta y edición de productos ya no muestra `stock`, usa categorías/marcas dinámicas, incluye casillas condicionales y permite editar las banderas de nuevo, destacado y recomendado.
+- La lectura de órdenes de compra ya usa las columnas V2 (`supplier_id`, `order_date`, `unit_cost`, `destination`) y las compras nuevas entran a bodega mediante movimientos `purchase`.
 - La compilación de producción se validó con `npm run build` y quedó correcta.
 
 ### Cambios recientes de arquitectura
@@ -1155,6 +1285,7 @@ Esta revisión compara el documento con el código presente en `main/`. El resul
 - Ventas físicas, movimientos de venta, transferencias de bodega a venta y lectura del historial de movimientos.
 - Autenticación con Supabase Auth cuando existen las variables de entorno y modo demo local cuando no está configurado Supabase.
 - RLS para separar lectura pública del catálogo y operaciones administrativas, además de inserción pública de clientes, pedidos, items y pagos.
+- La arquitectura aprobada ahora agrupa Productos, Variantes, Inventario de compras, Compras, Inventario de venta y Categorías/atributos bajo Gestión de productos; Ventas y los demás módulos operativos permanecen independientes.
 
 #### Diferencias importantes encontradas
 
@@ -1170,6 +1301,8 @@ Esta revisión compara el documento con el código presente en `main/`. El resul
 10. **Roles y autenticación tienen alcance limitado.** Existe `admin_profiles`, pero `hasAccess()` concede acceso general y el store fuerza `super_admin`. También permanece la tabla compatible `admins` con `password_hash` y el modo demo con credenciales/localStorage; por tanto, Supabase Auth no es el único camino en todos los entornos.
 11. **El CRUD del catálogo no cubre todo el esquema.** El panel gestiona principalmente nombre, categoría, descripción, precio, imagen y activo. Marca, tipo de piel, acabado, cobertura, contenido neto, código de barras, slug y banderas de destacado/recomendado no están completos en el flujo administrativo.
 12. **La política RLS documentada tiene un fragmento incompleto.** En el bloque de recomendaciones aparece `create policy "orders_admin_update" on public.orders` sin `for update`, `using` ni `with check`; ese SQL no está listo para ejecutar tal como aparece en el documento.
+13. **La nueva organización todavía no está reflejada completamente en la interfaz ni en Supabase.** Proveedores, categorías, marcas, tipos de piel, acabados y coberturas deben administrarse desde un módulo dinámico; hoy solo existen proveedores y categorías parciales, y los demás atributos se manejan principalmente como texto o datos mock.
+14. **El formulario de Productos ya no mezcla catálogo e inventario.** Se eliminó la entrada de `stock` de alta, edición y variantes. La cantidad inicial se registra en Compras, entra a Bodega y se transfiere después a Inventario de venta. La pantalla de inventario aún conserva nombres legacy por compatibilidad, pero el flujo V2 usa movimientos.
 
 #### Estado de producción
 
@@ -1178,10 +1311,17 @@ La arquitectura base y el recorrido visual están avanzados, pero todavía no de
 #### Prioridad actualizada
 
 1. Validar `atomic_order.sql` con un pedido real de prueba, pedidos concurrentes y liberación por devolución.
-2. Consolidar `audit_logs` y eliminar el script destructivo o convertirlo en migración segura.
-3. Alinear las lecturas y escrituras de órdenes de compra con las columnas V2 y retirar los caminos legacy.
-4. Corregir los contratos de `updated_at` en pagos y envíos, o dejar de enviarlo.
-5. Completar comprobantes de pago, datos de envío, estados soportados y pruebas E2E.
+2. Ejecutar y validar la migración de tablas maestras y relaciones dinámicas para categorías, subcategorías, marcas, tipos de piel, acabados y coberturas.
+3. Probar el nuevo formulario de catálogo y cargar los valores iniciales del negocio.
+4. Hacer que toda compra entre a bodega y que la transferencia a venta sea parcial o total mediante movimientos.
+5. Consolidar `audit_logs`, retirar caminos legacy y corregir los contratos de pagos/envíos.
+6. Completar comprobantes, datos de envío, estados soportados y pruebas E2E.
+
+#### Cambios de Supabase requeridos por esta decisión
+
+Los cambios de Supabase todavía no se han ejecutado. La migración descrita en la sección 4.3 es necesaria para crear las tablas maestras y relacionarlas con `products`. Debe ejecutarse después de respaldar la base y revisar los valores actuales de `brand`, `skin_type`, `finish` y `coverage`.
+
+La migración no debe borrar datos ni eliminar inmediatamente `product_variants.stock`. Primero se deben copiar los valores existentes, adaptar el frontend para que no edite stock desde Productos/Variantes y verificar los saldos de `inventory_movements`. Solo después se podrá retirar el campo legacy.
 
 ---
 
@@ -1274,13 +1414,15 @@ values
 ### Qué haría yo en este proyecto
 
 1. Mantener la estructura visual actual de Vue.
-2. Crear las tablas nuevas en Supabase.
-3. Migrar la lógica de inventario desde `sale_inventory` y `purchase_inventory` a `inventory_movements` como fuente real.
-4. Mantener `products` como catálogo, pero con campos adicionales para maquillaje.
-5. Añadir `product_variants` para tonos y referencias.
-6. Añadir `suppliers`, `purchase_orders`, `payments`, `shipments`, `admins` con Supabase Auth y `admin_profiles`.
-7. Quitar acceso público masivo a pedidos y dejar la consulta para un token o confirmación por WhatsApp.
-8. Cuando todo esto quede estable, integrar pago online y factura digital.
+2. Crear el módulo de Gestión de productos con Productos, Variantes, Inventario de compras, Compras, Inventario de venta y Categorías/atributos.
+3. Crear las tablas maestras dinámicas en Supabase y relacionarlas con `products`.
+4. Quitar `stock` del formulario de Productos y dejar las existencias bajo `inventory_movements`.
+5. Mantener `products` como catálogo, con reglas condicionales para tipo de piel, acabado, cobertura y contenido neto.
+6. Mantener `product_variants` para tonos y referencias, gestionadas desde su módulo independiente.
+7. Garantizar que las compras entren primero a bodega y que las transferencias a venta sean posteriores y parciales o totales.
+8. Añadir `suppliers`, `purchase_orders`, `payments`, `shipments`, `admins` con Supabase Auth y `admin_profiles`.
+9. Quitar acceso público masivo a pedidos y dejar la consulta para un token o confirmación por WhatsApp.
+10. Cuando todo esto quede estable, integrar pago online y factura digital.
 
 ### Qué no haría
 

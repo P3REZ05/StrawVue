@@ -1,7 +1,9 @@
 <script setup>
-import { reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useInventoryStore } from '../../stores/inventory'
 
 const emit = defineEmits(['save'])
+const inventory = useInventoryStore()
 
 const showAddModal = ref(false)
 const errorMessage = ref('')
@@ -10,9 +12,29 @@ const newProduct = reactive({
   description: '',
   price: '',
   category: '',
-  stock: '',
+  brandId: '',
+  skinTypeId: '',
+  finishId: '',
+  coverageId: '',
+  isFeatured: false,
+  isNew: true,
+  isRecommended: false,
+  status: 'active',
+  useSkinType: false,
+  useFinish: false,
+  useCoverage: false,
+  useNetContent: false,
+  netContentMl: '',
   image: null
 })
+
+const selectedCategory = computed(() => newProduct.category.trim().toLowerCase())
+const isFacialCare = computed(() => ['cuidado facial', 'skincare'].includes(selectedCategory.value))
+const supportsFinish = computed(() => ['bases', 'primer y fijador', 'labios', 'labiales', 'correctores'].includes(selectedCategory.value))
+const supportsCoverage = computed(() => selectedCategory.value === 'bases')
+const categories = computed(() => inventory.categories.filter((item) => item.active !== false))
+
+onMounted(() => { inventory.init().catch(() => {}) })
 
 function handleImageChange(event) {
   const file = event.target.files[0]
@@ -31,13 +53,32 @@ function handleSubmit() {
     return
   }
 
-  emit('save', { ...newProduct })
+  emit('save', {
+    ...newProduct,
+    categoryId: categories.value.find((category) => category.name === newProduct.category)?.id || '',
+    skinTypeId: newProduct.useSkinType ? newProduct.skinTypeId : '',
+    finishId: newProduct.useFinish ? newProduct.finishId : '',
+    coverageId: newProduct.useCoverage ? newProduct.coverageId : '',
+    netContentMl: newProduct.useNetContent ? Number(newProduct.netContentMl) || null : null
+  })
   showAddModal.value = false
   newProduct.name = ''
   newProduct.description = ''
   newProduct.price = ''
   newProduct.category = ''
-  newProduct.stock = ''
+  newProduct.brandId = ''
+  newProduct.skinTypeId = ''
+  newProduct.finishId = ''
+  newProduct.coverageId = ''
+  newProduct.isFeatured = false
+  newProduct.isNew = true
+  newProduct.isRecommended = false
+  newProduct.status = 'active'
+  newProduct.useSkinType = false
+  newProduct.useFinish = false
+  newProduct.useCoverage = false
+  newProduct.useNetContent = false
+  newProduct.netContentMl = ''
   newProduct.image = null
   errorMessage.value = ''
 }
@@ -101,27 +142,20 @@ function closeModal() {
                     class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-pink-100"
                   />
                 </div>
-                <div>
-                  <label class="mb-1 block text-sm font-bold text-neutral-700" for="stock">Stock:</label>
-                  <input
-                    id="stock"
-                    v-model="newProduct.stock"
-                    type="number"
-                    required
-                    min="0"
-                    class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-pink-100"
-                  />
-                </div>
               </div>
               <div>
                 <label class="mb-1 block text-sm font-bold text-neutral-700" for="category">Categoría:</label>
-                <input
+                <select
                   id="category"
                   v-model="newProduct.category"
-                  type="text"
                   required
                   class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-pink-100"
-                />
+                >
+                  <option value="">Seleccionar categoría</option>
+                  <option v-for="category in categories" :key="category.id" :value="category.name">
+                    {{ category.name }}
+                  </option>
+                </select>
               </div>
               <div>
                 <label class="mb-1 block text-sm font-bold text-neutral-700" for="image">Imagen:</label>

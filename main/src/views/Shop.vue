@@ -54,7 +54,7 @@ const sortOptions = [
 ]
 
 onMounted(() => {
-  inventoryStore.init()
+  inventoryStore.init().catch(() => {})
 })
 
 const visibleProducts = computed(() => {

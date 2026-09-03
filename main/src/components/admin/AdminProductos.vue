@@ -10,19 +10,28 @@ const filteredProducts = ref([])
 const showModal = ref(false)
 const selectedProduct = ref(null)
 const selectedAction = ref(null)
-const variantForm = reactive({ name: '', sku: '', price: '', stock: '' })
-const variantError = ref('')
 
 const formData = reactive({
   name: '',
   description: '',
   price: '',
   category: '',
-  stock: ''
+  brandId: '',
+  skinTypeId: '',
+  finishId: '',
+  coverageId: '',
+  isFeatured: false,
+  isNew: true,
+  isRecommended: false,
+  status: 'active'
 })
 
 onMounted(async () => {
-  await inventoryStore.init()
+  try {
+    await inventoryStore.init()
+  } catch {
+    // El error ya se muestra en AdminPanel; aquí solo evitamos una promesa sin capturar.
+  }
   filteredProducts.value = products.value
 })
 
@@ -52,7 +61,14 @@ function handleProductAction(action, product) {
     formData.description = product.description
     formData.price = product.price
     formData.category = product.category
-    formData.stock = product.stock
+    formData.brandId = product.brandId || ''
+    formData.skinTypeId = product.skinTypeId || ''
+    formData.finishId = product.finishId || ''
+    formData.coverageId = product.coverageId || ''
+    formData.isFeatured = product.isFeatured === true
+    formData.isNew = product.isNew !== false
+    formData.isRecommended = product.isRecommended === true
+    formData.status = product.status || (product.active === false ? 'paused' : 'active')
     showModal.value = true
   } else if (action === 'delete') {
     if (window.confirm('¿Estás seguro de que quieres eliminar este producto?')) {
@@ -65,41 +81,23 @@ function handleProductAction(action, product) {
   selectedAction.value = null
 }
 
-function resetVariantForm() {
-  variantForm.name = ''
-  variantForm.sku = ''
-  variantForm.price = ''
-  variantForm.stock = ''
-  variantError.value = ''
-}
-
-async function addVariant() {
-  if (!selectedProduct.value || !variantForm.name.trim()) {
-    variantError.value = 'Escribe el nombre o tono de la variante.'
-    return
-  }
-
-  try {
-    await inventoryStore.addVariant(selectedProduct.value.id, variantForm)
-    resetVariantForm()
-  } catch (error) {
-    variantError.value = error.message || 'No se pudo guardar la variante.'
-  }
-}
-
-async function deactivateVariant(variant) {
-  await inventoryStore.deactivateVariant(variant.id)
-}
-
 async function handleSaveProduct(newProduct) {
   await inventoryStore.addProduct({
     name: newProduct.name,
     description: newProduct.description,
     price: Number(newProduct.price),
     category: newProduct.category,
-    stock: Number(newProduct.stock) || 0,
+    brandId: newProduct.brandId,
+    skinTypeId: newProduct.skinTypeId,
+    finishId: newProduct.finishId,
+    coverageId: newProduct.coverageId,
+    netContentMl: newProduct.netContentMl,
+    isFeatured: newProduct.isFeatured,
+    isNew: newProduct.isNew,
+    isRecommended: newProduct.isRecommended,
+    status: newProduct.status,
     image: newProduct.image ? URL.createObjectURL(newProduct.image) : '',
-    active: true
+    active: newProduct.status === 'active'
   })
   filteredProducts.value = products.value
 }
@@ -110,7 +108,17 @@ async function handleEditSubmit() {
     name: formData.name,
     description: formData.description,
     price: Number(formData.price),
-    category: formData.category
+    category: formData.category,
+    categoryId: inventoryStore.categories.find((category) => category.name === formData.category)?.id || '',
+    brandId: formData.brandId,
+    skinTypeId: formData.skinTypeId,
+    finishId: formData.finishId,
+    coverageId: formData.coverageId,
+    isFeatured: formData.isFeatured,
+    isNew: formData.isNew,
+    isRecommended: formData.isRecommended,
+    status: formData.status,
+    active: formData.status === 'active'
   })
   showModal.value = false
   selectedProduct.value = null
@@ -119,7 +127,6 @@ async function handleEditSubmit() {
 function closeModal() {
   showModal.value = false
   selectedProduct.value = null
-  resetVariantForm()
 }
 </script>
 
@@ -192,7 +199,6 @@ function closeModal() {
           <h3 class="font-bold text-black">{{ product.name }}</h3>
           <p class="mt-1 line-clamp-2 text-sm text-neutral-500">{{ product.description }}</p>
           <p class="mt-2 text-xs font-semibold text-neutral-500">Categoría: {{ product.category }}</p>
-          <p class="mt-1 text-sm font-semibold text-neutral-500">Stock: {{ product.stock }}</p>
           <p class="mt-2 text-lg font-bold text-[var(--primary)]">{{ product.price }}</p>
         </div>
       </article>
@@ -245,50 +251,31 @@ function closeModal() {
                       class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-pink-100"
                     />
                   </div>
-                  <div>
-                    <label class="mb-1 block text-sm font-bold text-neutral-700" for="edit-stock">Stock:</label>
-                    <input
-                      id="edit-stock"
-                      v-model="formData.stock"
-                      type="number"
-                      required
-                      min="0"
-                      class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-pink-100"
-                    />
-                  </div>
                 </div>
                 <div>
                   <label class="mb-1 block text-sm font-bold text-neutral-700" for="edit-category">Categoría:</label>
-                  <input
+                  <select
                     id="edit-category"
                     v-model="formData.category"
-                    type="text"
                     required
                     class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-pink-100"
-                  />
+                  >
+                    <option value="">Seleccionar categoría</option>
+                    <option v-for="category in inventoryStore.categories" :key="category.id" :value="category.name">{{ category.name }}</option>
+                  </select>
                 </div>
-                <div class="border-t border-pink-100 pt-4">
-                  <div class="flex items-center justify-between gap-3">
-                    <div>
-                      <h6 class="font-bold text-[var(--primary)]">Variantes</h6>
-                      <p class="text-xs text-neutral-500">Tonos o referencias con stock independiente.</p>
-                    </div>
-                  </div>
-                  <div v-if="selectedProduct.variants?.length" class="mt-3 space-y-2">
-                    <div v-for="variant in selectedProduct.variants" :key="variant.id" class="flex items-center justify-between rounded-xl bg-pink-50 px-3 py-2 text-sm">
-                      <span><strong>{{ variant.name }}</strong><span v-if="variant.sku" class="ml-2 text-xs text-neutral-500">{{ variant.sku }}</span></span>
-                      <span class="flex items-center gap-3"><span>{{ variant.stock }} und.</span><button type="button" class="text-xs font-bold text-red-500 hover:underline" @click="deactivateVariant(variant)">Desactivar</button></span>
-                    </div>
-                  </div>
-                  <p v-else class="mt-3 text-sm text-neutral-500">Este producto aún no tiene variantes.</p>
-                  <p v-if="variantError" class="mt-3 rounded-xl bg-red-50 p-2 text-xs text-red-600">{{ variantError }}</p>
-                  <div class="mt-3 grid gap-2 sm:grid-cols-4">
-                    <input v-model="variantForm.name" class="rounded-xl border border-pink-100 px-3 py-2 text-sm" placeholder="Tono / nombre" />
-                    <input v-model="variantForm.sku" class="rounded-xl border border-pink-100 px-3 py-2 text-sm" placeholder="SKU" />
-                    <input v-model="variantForm.price" type="number" min="0" class="rounded-xl border border-pink-100 px-3 py-2 text-sm" placeholder="Precio" />
-                    <input v-model="variantForm.stock" type="number" min="0" class="rounded-xl border border-pink-100 px-3 py-2 text-sm" placeholder="Stock" />
-                  </div>
-                  <button type="button" class="mt-2 rounded-xl border border-pink-200 px-4 py-2 text-sm font-bold text-[var(--primary)] hover:bg-pink-50" @click="addVariant">Añadir variante</button>
+                <div>
+                  <label class="mb-1 block text-sm font-bold text-neutral-700" for="edit-brand">Marca:</label>
+                  <select id="edit-brand" v-model="formData.brandId" class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm"><option value="">Sin marca</option><option v-for="brand in inventoryStore.brands" :key="brand.id" :value="brand.id">{{ brand.name }}</option></select>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-3">
+                  <label class="flex items-center gap-2 text-sm text-neutral-700"><input v-model="formData.isFeatured" type="checkbox" class="accent-[var(--primary)]" /> Destacado</label>
+                  <label class="flex items-center gap-2 text-sm text-neutral-700"><input v-model="formData.isNew" type="checkbox" class="accent-[var(--primary)]" /> Producto nuevo</label>
+                  <label class="flex items-center gap-2 text-sm text-neutral-700"><input v-model="formData.isRecommended" type="checkbox" class="accent-[var(--primary)]" /> Recomendado</label>
+                </div>
+                <div>
+                  <label class="mb-1 block text-sm font-bold text-neutral-700" for="edit-status">Estado:</label>
+                  <select id="edit-status" v-model="formData.status" class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm"><option value="draft">Borrador</option><option value="active">Activo</option><option value="paused">Pausado</option><option value="archived">Archivado</option></select>
                 </div>
                 <div class="flex justify-end gap-2 pt-2">
                   <button type="button" class="rounded-xl border border-pink-200 px-5 py-2.5 text-sm font-bold" @click="closeModal">

@@ -1,135 +1,125 @@
-# 🍓 Strawberry Makeup - Conexión a Supabase
+# Base de datos — Strawberry Makeup
 
-## 📋 Requisitos previos
+Toda la estructura vive en Supabase (Postgres + Auth + RLS).
 
-1. Crear una cuenta gratuita en [supabase.com](https://supabase.com)
-2. Crear un nuevo proyecto (elige un nombre como `strawberry-makeup`)
-3. Anotar la **URL del proyecto** y la **API Key (anon)** que aparecen en:
-   - Supabase Dashboard → Settings → API
+> **Credenciales:** este archivo no contiene ninguna. La URL y la clave del
+> proyecto van en `main/.env`, que está en `.gitignore`. Usa
+> `main/.env.example` como plantilla.
 
-## 🗄️ Paso 1: Crear la base de datos
+---
 
-1. Ve a **Supabase Dashboard** → tu proyecto → **SQL Editor**
-2. Copia TODO el contenido del archivo `main/supabase/schema.sql`
-3. Pégalo en el editor SQL
-4. Haz clic en **Run** (o Ctrl+Enter)
+## Orden de ejecución
 
-Esto creará:
-- 13 tablas (products, purchase_inventory, sale_inventory, purchase_orders, purchase_order_items, sales, sale_items, orders, order_items, admins, store_settings, categories, promotions)
-- Datos iniciales (categorías, configuración de tienda, admin)
-- Políticas de seguridad RLS
+Los scripts sueltos de esta carpeta son el **estado histórico** de la base y
+ya están aplicados. Las migraciones nuevas viven en `migrations/` y están
+numeradas. Ver `migrations/README.md` para el detalle y el estado de cada una.
 
-## 🔑 Paso 2: Crear el usuario admin en Supabase Auth
+| # | Archivo | Estado |
+|---|---|---|
+| 1 | `schema.sql` | aplicado — **no reejecutar** (ver aviso abajo) |
+| 2 | `add_audit_logs.sql` | aplicado — **no reejecutar** (hace `drop table ... cascade`) |
+| 3 | `atomic_order.sql` | aplicado, reemplazado por `migrations/005` |
+| 4 | `product_catalog_migration.sql` | aplicado |
+| 5 | `fix_admin_rls.sql` | aplicado, ampliado por `migrations/001` |
+| — | `verify_admin_access.sql` | utilidad de diagnóstico, no es migración |
+| 6+ | `migrations/*.sql` | ver `migrations/README.md` |
 
-1. Ve a **Supabase Dashboard** → **Authentication** → **Users**
-2. Haz clic en **Add user** → **Create new user**
-3. Ingresa:
-   - **Email:** `admin@strawberrymakeup.com`
-   - **Password:** `admin123` (cámbiala después)
-4. Haz clic en **Create user**
+### Aviso: no reejecutes `schema.sql`
 
-## 🔌 Paso 3: Obtener las credenciales
+`schema.sql` crea el trigger `order_item_inventory_movement`, que descuenta
+stock al insertar un `order_item`. Desde `migrations/005` ese descuento lo hace
+el RPC `create_order_with_stock`. Si el trigger vuelve a existir, cada pedido
+descontaría el stock **dos veces**.
 
-1. Ve a **Supabase Dashboard** → **Settings** → **API**
-2. Copia estos dos valores:
-   - **Project URL:** `https://TU-PROYECTO.supabase.co`
-   - **anon public key:** `eyJhbGciOi...`
+Hay una red de seguridad: el índice único `ux_inventory_movements_pedido_unico`
+convierte ese caso en un error visible en vez de una pérdida silenciosa de
+inventario. Aun así, no lo reejecutes.
 
-   https://vzsdubpklknbccvgvukl.supabase.co
-   sb_publishable_XQi_S88S6vHiTwn5k9hQxg_MGbHZXks
+### Aviso: no reejecutes `add_audit_logs.sql`
 
-## 📁 Paso 4: Configurar el proyecto 
+Empieza con `drop table public.admin_profiles cascade`. Ese CASCADE borra tu
+perfil de administrador **y** las políticas RLS que dependen de él. Fue lo que
+dejó 13 tablas sin políticas y el panel admin sin poder leer pedidos ni pagos.
 
-1. Crea un archivo `.env` en la carpeta `main/`:
+---
 
-```env
-VITE_SUPABASE_URL=https://TU-PROYECTO.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
-```
+## Puesta en marcha desde cero
 
-2. Instala la librería de Supabase:
+1. Crear el proyecto en [supabase.com](https://supabase.com).
+2. **SQL Editor** → ejecutar en orden los archivos de la tabla de arriba.
+3. **Authentication → Users → Add user**: crear el usuario administrador con
+   una contraseña fuerte y única.
+4. Copiar su UUID y ejecutar `verify_admin_access.sql` reemplazando el
+   marcador, para darle el perfil `super_admin` en `admin_profiles`.
+5. Copiar `main/.env.example` a `main/.env` y completar URL y anon key
+   (Settings → API).
+6. `cd main && npm install && npm run dev`.
 
-```bash
-cd main
-npm install @supabase/supabase-js
-```
+---
 
-## 🧪 Paso 5: Probar la conexión
+## Modelo de datos
 
-Crea un archivo `main/src/lib/supabase.js`:
+Tres capas que no se mezclan:
 
-```js
-import { createClient } from '@supabase/supabase-js'
+| Capa | Tablas | Regla |
+|---|---|---|
+| Catálogo | `products`, `product_variants`, `categories`, `brands`, `skin_types`, `finishes`, `coverages` | no guarda existencias |
+| Inventario | `inventory_movements` (historial), `inventory_sale_balances` (saldo público), vista `inventory_balances` | única fuente de verdad del stock |
+| Operación | `orders`, `order_items`, `payments`, `shipments`, `customers`, `sales`, `sale_items`, `purchase_orders`, `purchase_order_items`, `suppliers` | nunca escribe stock directo, solo movimientos |
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+Soporte: `admin_profiles` (perfiles admin), `audit_logs` (auditoría),
+`promotions` / `promotion_products`, `store_settings`.
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
-```
+### El stock no es una columna
 
-## 📊 Estructura de la base de datos
+`products` no tiene `stock`. `product_variants.stock` existe pero es **legacy**
+y no debe escribirse desde código nuevo. El disponible se deriva de
+`inventory_movements` con esta regla, definida una sola vez en
+`movement_sale_delta()` y `movement_warehouse_delta()`:
 
-### Tablas principales
+**Stock de venta**
+- `sale` / `online_order` → siempre (cantidad negativa)
+- `transfer` / `return` / `adjustment` / `damage` con `reference_type = 'sale_inventory'`
 
-| Tabla | Descripción |
-|-------|-------------|
-| `products` | Catálogo maestro de productos |
-| `purchase_inventory` | Productos en bodega (comprados, no a la venta) |
-| `sale_inventory` | Productos listos para vender con stock |
-| `purchase_orders` | Órdenes de compra a proveedores |
-| `purchase_order_items` | Detalle de cada compra |
-| `sales` | Ventas físicas (POS) |
-| `sale_items` | Detalle de cada venta |
-| `orders` | Pedidos online de clientes |
-| `order_items` | Detalle de cada pedido online |
-| `admins` | Administradores del sistema |
-| `store_settings` | Configuración (envío gratis, WhatsApp, etc.) |
-| `categories` | Categorías de productos |
-| `promotions` | Promociones activas |
+**Stock de bodega**
+- `purchase` → siempre entra a bodega
+- `transfer` / `return` / `adjustment` / `damage` con `reference_type = 'warehouse'`
 
-### Campos clave
+### Flujo de un pedido
 
-**products:**
-- `id` - Identificador único
-- `name` - Nombre del producto
-- `category` - Categoría
-- `description` - Descripción
-- `price` - Precio de venta
-- `sale_price` - Precio rebajado (opcional)
-- `original_price` - Precio original (para tachado)
-- `image` - URL de la imagen
-- `active` - Si está activo (true/false)
+1. El storefront llama al RPC `create_order_with_stock(...)`.
+2. El RPC toma un advisory lock por producto/variante, en orden determinista.
+3. Valida el stock disponible con `available_sale_stock()`.
+4. Crea cliente, pedido, items, movimiento de salida, pago y envío, todo en
+   una sola transacción.
+5. Si no alcanza el stock, lanza excepción y no queda nada a medias.
 
-**sale_inventory:**
-- `product_id` - Referencia al producto
-- `quantity` - Stock disponible
-- `cost_price` - Costo de compra (para calcular ganancias)
+Probado con 10 pedidos simultáneos por la última unidad: uno pasa, nueve se
+rechazan, el stock nunca queda negativo.
 
-**orders:**
-- `order_number` - Número de orden (ej: ORD-1001)
-- `customer_name` - Nombre del cliente
-- `customer_phone` - Teléfono
-- `customer_city` - Ciudad
-- `customer_address` - Dirección
-- `subtotal` - Subtotal
-- `shipping` - Costo de envío
-- `total` - Total
-- `status` - pendiente / enviado / entregado / cancelado
+### Devoluciones
 
-## 🔒 Seguridad (RLS)
+`return_order_stock(p_order_id)` inserta un movimiento `return` compensatorio.
+**Nunca** se borran filas de `inventory_movements`: el historial es la fuente
+de verdad y la auditoría. La función es idempotente.
 
-Las políticas de seguridad ya están configuradas en el SQL:
+---
 
-- **Lectura pública:** products, categories, promotions, orders, order_items, store_settings
-- **Solo admin (autenticado):** purchase_inventory, sale_inventory, purchase_orders, purchase_order_items, sales, sale_items, admins
-- **Escritura pública:** orders, order_items (para que los clientes puedan crear pedidos)
-- **Escritura admin:** products, categories, promotions, store_settings
+## Seguridad
 
-## 🚀 Siguientes pasos
+- Autenticación: **Supabase Auth** + perfil en `admin_profiles`. No existe
+  login local ni modo demo.
+- Autorización: la función `public.is_admin()` (SECURITY DEFINER, para no
+  recursar sobre RLS) se usa en todas las políticas de admin.
+- Escritura pública limitada a `customers`, `orders`, `order_items` y
+  `payments`, solo INSERT, para que el cliente pueda crear su pedido.
+- Lectura pública: catálogo, categorías, tablas maestras activas, promociones
+  activas, `store_settings` y `inventory_sale_balances` (saldo agregado; no
+  expone bodega ni historial).
+- `audit_logs` no tiene política de UPDATE ni de DELETE: un registro de
+  auditoría que se puede editar no es auditoría.
 
-1. ✅ Crear la base de datos (schema.sql)
-2. ✅ Crear usuario admin en Auth
-3. ✅ Configurar `.env` con credenciales
-4. ⬜ Conectar los stores de Pinia con Supabase
-5. ⬜ Proteger rutas del admin con autenticación
-6. ⬜ Sincronizar inventario con la tienda pública
+> **Cuidado con RLS:** una tabla con RLS activo y sin políticas queda
+> inaccesible, y PostgREST devuelve 0 filas **sin error**. Un SELECT parece
+> vacío y un UPDATE parece exitoso. Si algo del panel "funciona pero no
+> guarda", revisa las políticas primero con `migrations/000_diagnostico.sql`.
