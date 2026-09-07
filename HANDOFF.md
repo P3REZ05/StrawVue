@@ -7,27 +7,28 @@ Para saber *cómo* trabajar en el repo, lee `CLAUDE.md`. Este archivo dice *qué
 - **Rama activa:** `dev` (remoto `P3REZ05/StrawVue`)
 - **Fase:** cierre operativo. No se agregan features hasta validar el flujo real.
 - **Sprint A:** ✅ **completo.** Código verificado y las 6 migraciones aplicadas en Supabase.
+- **Sprint B:** en curso. Panel validado y catálogo sembrado; falta el circuito de inventario y el pedido real.
+- **Refactor del módulo de productos:** etapas 1–3 de 8 completas (ver `docs/refactor-modulo-productos.md`).
 - **Proyecto Supabase real:** `StrawBack` (`gjchbbvqoigvhildddfw`), org `Strawberry-Makeup`.
 
 ---
 
 ## 0. LO PRIMERO AL RETOMAR
 
-Sprint A está cerrado: las migraciones `001`–`006` **ya están aplicadas** en el
-proyecto `StrawBack` y verificadas contra la base real. El siguiente paso es la
-**prueba end-to-end con datos reales** (§5).
+Sprint A cerrado y verificado en producción. Sprint B a medias.
 
-Antes de tocar nada:
+**Ya validado en la app real (3 sep):** la tienda pública carga, el panel entra,
+las 12 secciones renderizan sin un solo error de consola, la auditoría muestra
+registros, y **el panel escribe de verdad** — se crearon categoría (`Contorno`),
+marca (`Atenea`), proveedor y producto (`Brochas Ani-k`), todos confirmados en la
+base. Antes de las migraciones, esas escrituras habrían fallado en silencio.
 
-1. `cd main && npm install` (si es una máquina nueva). El `.env` ya apunta al
-   proyecto correcto; si no existe, copia `.env.example`. **Sin `.env` la app no arranca.**
-2. Corre `main/supabase/migrations/000_diagnostico.sql` (solo lectura) para
-   confirmar que el estado sigue sano. Lo esperado hoy:
-   `tablas_rls_SIN_politicas` **vacío** y `trigger_duplicador_existe` **false**.
-3. Si vas a ejecutar SQL desde el SQL Editor, recuerda que Supabase muestra un
-   diálogo de confirmación ante cualquier `drop`. Si no lo confirmas, la
-   consulta no corre y el panel sigue mostrando el resultado anterior, que se
-   lee igual que un éxito. Verifica el efecto, no el mensaje.
+**Lo que falta del Sprint B:** el circuito de inventario completo, que sigue sin
+probarse nunca — variantes → orden de compra → entrada a bodega → transferencia
+parcial a venta → pedido desde el storefront → pago → envío → devolución.
+
+**Bloqueante para lanzar:** B-15, las imágenes de producto no se suben a ninguna
+parte (§2b).
 
 ## 1. Qué se hizo en el Sprint A
 
@@ -96,6 +97,92 @@ Modificados: `main/.gitignore`, `main/src/lib/supabase.js`,
 
 ---
 
+## 2a. Refactor del módulo de productos
+
+Diseño completo en `docs/refactor-modulo-productos.md`. Decisiones tomadas:
+editor a página completa, el precio del tono **hereda** del producto (NULL =
+hereda), y entrega por etapas.
+
+| Etapa | Estado |
+|---|---|
+| 1 · Migración 007: modelo de tonos e imágenes | ✅ aplicada y verificada |
+| 2 · Supabase Storage + optimizador de imágenes | ✅ bucket creado, código listo |
+| 3 · Extraer el store de catálogo | ✅ `catalog.js` creado, panel verificado |
+| 4 · Editor de producto a página completa | ✅ verificado en vivo |
+| 5 · Editor de tonos con swatches | ✅ chips, lotes y orden; falta subir swatch por tono |
+| 6 · Ficha de trazabilidad por producto | pendiente |
+| 7 · Chips y filtros en la tienda | ✅ verificado en vivo |
+| 8 · Retirar `product_variants.stock` y `products.image` | pendiente |
+
+**Optimizador de imágenes** (`lib/imageOptimizer.js`). Medido sobre las imágenes
+reales del proyecto: `pexels.jpg` 4.472 KB → 256 KB (−94 %), banner 1.233 KB →
+82 KB (−93 %), logo PNG → WebP sin pérdida −56 % idéntico pixel a pixel.
+Con 1 GB del plan gratuito eso son ~4.000 imágenes en vez de 220.
+
+Dato clave para maquillaje: se midió la desviación de color en Delta-E
+CIEDE2000 sobre una carta de 10 tonos. Sin pérdida da dE 0,00; WebP q=95 llega a
+dE 2,17 en el interior de cada franja, perceptible lado a lado. Por eso el
+perfil `swatch` prueba también PNG sin pérdida y se queda con él cuando pesa
+menos. El color exacto vive además en `swatch_hex`.
+
+**Separación de stores.** `inventory.js` bajó de 41 KB a 24 KB; el catálogo vive
+ahora en `catalog.js`. Los accesos antiguos (`inventory.catalog`,
+`inventory.addProduct`…) siguen funcionando como delegaciones para no romper las
+pantallas durante la migración; **el código nuevo debe usar `useCatalogStore`**.
+
+Corregido de paso: `updateSalePrice` actualizaba la columna `price` en la base
+pero escribía `salePrice` en el objeto local, así que justo después de editar se
+veía un precio y al recargar otro.
+
+---
+
+## 2b. Bugs abiertos encontrados durante el Sprint B
+
+### B-15 · Las imágenes de producto no se guardan — **infraestructura lista, falta conectarla**
+
+Resuelto en la base y en la capa de datos: bucket `product-images`, tabla
+`product_images`, `lib/storage.js` y `lib/imageOptimizer.js`. **Falta** que el
+formulario de producto los use en vez de `URL.createObjectURL`. Hasta entonces
+el síntoma sigue vivo: `Brochas Ani-k` tiene guardada una URL `blob:` muerta y
+es el único error de consola del panel.
+
+Descripción original del problema:
+
+`AdminProductos.vue` hace `URL.createObjectURL(newProduct.image)` y guarda el
+resultado en `products.image`. Ejemplo real en la base:
+
+```
+blob:http://localhost:5173/e56228e7-6a88-452c-8d5a-b816177c0
+```
+
+Un `blob:` URL solo existe en la pestaña que lo creó. Al recargar está roto, y
+para cualquier cliente que entre a la tienda nunca existió. **No hay subida a
+almacenamiento en ningún punto del código.**
+
+*Trabajo necesario:* crear un bucket público en Supabase Storage con sus
+políticas, subir el archivo al guardar el producto, almacenar la URL pública en
+`products.image`, y manejar el reemplazo y borrado al editar. No es trivial.
+
+### B-16 · El formulario de alta no cubre los atributos dinámicos
+
+Corregido a medias. Ya se guardan `category_id` y `brand_id` (antes se perdían:
+`AdminProductos.vue` descartaba el `categoryId` que el formulario sí calculaba, y
+no existía selector de marca). **Siguen sin selector** en el alta:
+`skin_type_id`, `finish_id` y `coverage_id`. Los checkboxes de activación existen
+pero no hay desplegable detrás, así que esos campos siempre quedan vacíos.
+
+Completa la §3.1 del documento de arquitectura: los campos condicionales por
+categoría (tipo de piel solo en Cuidado facial, cobertura solo en Bases…).
+
+### B-17 · La auditoría no cubre las tablas maestras
+
+El trigger `audit_trigger` se aplicó a 8 tablas, pero no a `categories`,
+`brands`, `skin_types`, `finishes` ni `coverages`. Crear o pausar una categoría
+cambia qué se le ofrece al cliente y debería dejar rastro. Es una migración `007`
+de pocas líneas, reutilizando el bucle del `002`.
+
+---
+
 ## 2. Lección que conviene no olvidar
 
 **Una tabla con RLS activo y sin políticas no da error: da vacío.**
@@ -107,6 +194,52 @@ motivo real de que el flujo nunca se cerrara, y no se ve leyendo el frontend.
 
 Por eso: tras un UPDATE que deba afectar filas, usar `.select('id')` y comprobar
 que volvió al menos una. `orders.js → updateStatus` ya lo hace.
+
+---
+
+## 2c. Qué falta para que sea un panel profesional de maquillaje
+
+Revisión crítica del 3 de septiembre. Por orden de dolor:
+
+**1. Hay DOS formularios de producto compitiendo — limpiar ya.**
+El editor nuevo (`/admin/productos/:id`) convive con el modal viejo:
+`AdminAddFilter` sigue con su botón "Añadir" en la misma barra, y
+`AdminProductos.vue` conserva su modal de edición (línea ~217). Alguien va a
+usar el equivocado y guardará un producto sin tonos y con imagen `blob:`.
+También sobra la sección **"Variantes"** de la barra lateral: los tonos se
+editan dentro del producto.
+
+**2. Trazabilidad regulatoria — el hueco más serio.**
+Verificado con INVIMA: los cosméticos en Colombia requieren **Notificación
+Sanitaria Obligatoria** (vigencia 7 años); la etiqueta exige **número de lote** y
+**fecha de vencimiento cuando la estabilidad es ≤24 meses**; y **el distribuidor
+asume las mismas obligaciones que el titular de la NSO** en cuanto a seguridad
+del producto.
+
+El esquema no tiene ni NSO, ni lote, ni vencimiento. Consecuencias: ante un
+retiro de producto no se sabe a qué clientes llamar, se puede vender producto
+vencido, y en una inspección no hay cómo demostrar qué lote salió a quién.
+
+Encaja natural en el modelo actual: **un lote es un atributo del movimiento de
+compra**, entra con la mercancía y viaja hasta el pedido.
+
+**3. Comprobantes de pago sin interfaz.** `payments.proof_url` y `proof_name`
+existen desde el primer esquema. Con Storage ya funcionando es barato.
+
+**4. `prompt()` para decisiones críticas.** Pasar de bodega a venta —el paso que
+decide qué ve el cliente— usa un `prompt()` del navegador
+(`SaleInventory.vue:54`), igual que el cambio de precio (línea 85). No deja ver
+el stock por tono ni cancelar bien.
+
+**5. Duplicar producto.** Una segunda base son 40 tonos tecleados otra vez.
+
+**6. Promociones en `localStorage`.** `promotions` y `promotion_products` llevan
+sin usar desde el primer esquema. Para maquillaje las promos son el motor.
+
+**7. Un solo rol.** Quien despache pedidos ve costos, márgenes y proveedores.
+
+**8. Móvil.** El panel son tablas de diez columnas y se administrará desde el
+teléfono.
 
 ---
 
@@ -141,6 +274,7 @@ credenciales embebidas se eliminó, y la tabla legacy `admins` con
 | D-13 | Bundle de 528 KB en un solo chunk, sin code-splitting por ruta | bajo | bajo |
 | D-14 | El panel admin no captura transportadora, guía ni fecha estimada; `shipments` tiene las columnas pero la UI no las usa | medio | medio |
 | D-15 | Comprobantes de pago (`proof_url`, `proof_name`) sin interfaz de carga | medio | medio |
+| D-16 | Los productos existentes tienen `category` como texto libre y `category_id` nulo; hace falta un backfill una vez que el alta esté correcta | bajo | bajo |
 
 ---
 
@@ -197,4 +331,7 @@ reales, que es lo único que nunca se ha hecho.
 | 2026-08-23 | — | Revisión de arquitectura contra el código; 14 diferencias documentadas en `docs/arquitectura-proyecto-strawberry.md` §10.3 |
 | 2026-09-03 | Claude | Lectura completa del proyecto. Se crearon `CLAUDE.md` y `HANDOFF.md`. Identificados B-1 a B-4, S-1 a S-3, D-1 a D-11 |
 | 2026-09-03 | Claude | **Sprint A — código.** Encontrados 5 bugs críticos más (B-7 a B-11) y, al reproducir la base en PostgreSQL local, el B-13 de las políticas RLS perdidas. 6 migraciones numeradas e idempotentes, verificadas con pruebas de flujo, concurrencia e idempotencia. Frontend: modo demo eliminado, cálculo de stock corregido, auditoría unificada, mapeo de estados centralizado. `npm run build` pasa. |
+| 2026-09-03 | Claude | **Refactor de productos, etapas 4, 5 y 7.** Editor a página completa con seis secciones, creación al vuelo de marca y categoría, atributos condicionales por categoría y subida real de imágenes. Editor de tonos con chips, pegado por lotes y reordenación. Vitrina: chips de color, imagen que cambia con el tono, stock por tono y filtros por subtono y familia. Verificado en vivo creando `Base Velvet Skin` con 5 tonos: SKU automáticos, subtonos resueltos, herencia de precio (5 tonos pasaron de $0 a $38.900 con una sola edición), tonos agotados deshabilitados y filtro de subtono devolviendo 1 de 3 productos. Corregido `variant.stock`, columna legacy que ya no se carga y hacía que la ficha mostrara "undefined disponibles". |
+| 2026-09-03 | Claude | **Refactor de productos, etapas 1–3.** Investigación sobre modelado de tonos en cosmética (swatch sobre nombre, atributos gobernados, código NC/NW = subtono + profundidad). Migración 007 con `undertones`, `shade_families`, 8 columnas de tono, `product_images` y la vista `storefront_shades`; probada en Postgres local con casos de hex inválido, profundidad fuera de rango, tono por defecto duplicado e imagen principal duplicada. Migración 008: bucket con políticas. Optimizador de imágenes medido con Delta-E. `catalog.js` extraído con parser de lotes de tonos probado en 9 casos. Panel verificado en vivo: 12 secciones sin errores nuevos. |
+| 2026-09-03 | Claude | **Sprint B — arranque.** Verificada la app real contra la base migrada: tienda pública y las 12 secciones del panel sin errores de consola, auditoría con registros, y escrituras confirmadas (categoría, marca, proveedor, producto). Corregido el manejo de errores del panel y los textos de la sección Historial. Encontrados B-15 (imágenes en `blob:`), B-16 (atributos dinámicos sin selector) y B-17 (auditoría sin tablas maestras); B-14 corregido: el alta ya guarda `category_id` y `brand_id`. |
 | 2026-09-03 | Claude | **Sprint A — migraciones aplicadas.** El diagnóstico confirmó B-13 en producción: `sales`, `sale_items`, `shipments`, `promotion_products` y `admins` sin ninguna política, y `orders`/`payments`/`customers`/`order_items` solo con el insert público. Aplicadas 001–006. La 003 tuvo que repetirse: el diálogo de confirmación de Supabase no se aceptó y el panel mostró el resultado anterior como si hubiera funcionado. Estado final verificado: ninguna tabla con RLS sin políticas, `updated_at` en las 5 tablas, 8 funciones y 8 triggers de auditoría, índice antidoble presente, `public.admins` eliminada. También se descubrió que el ref de Supabase del README era de otro proyecto. |
