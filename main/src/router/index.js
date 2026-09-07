@@ -9,6 +9,7 @@ import ProductDetail from '../views/ProductDetail.vue'
 import Cart from '../views/Cart.vue'
 import AdminLogin from '../views/admin/AdminLogin.vue'
 import AdminPanel from '../components/admin/AdminPanel.vue'
+import ProductEditor from '../views/admin/ProductEditor.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -22,7 +23,10 @@ const router = createRouter({
     { path: '/carrito', name: 'cart', component: Cart },
     { path: '/terminos', name: 'terms', component: Terms },
     { path: '/admin', name: 'admin-login', component: AdminLogin },
-    { path: '/admin/dashboard', name: 'admin-dashboard', component: AdminPanel }
+    { path: '/admin/dashboard', name: 'admin-dashboard', component: AdminPanel },
+    // El editor vive en su propia ruta para que un producto se pueda enlazar
+    // y para que la matriz de tonos tenga sitio. `nuevo` crea uno en blanco.
+    { path: '/admin/productos/:id', name: 'admin-product-editor', component: ProductEditor }
   ]
 })
 

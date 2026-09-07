@@ -2,12 +2,17 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ProductCard from '../components/products/ProductCard.vue'
-import { categories } from '../data/mockData'
+import { useCatalogStore } from '../stores/catalog'
 import { useInventoryStore } from '../stores/inventory'
 
 const route = useRoute()
 const router = useRouter()
 const inventoryStore = useInventoryStore()
+const catalogo = useCatalogStore()
+
+// Las categorías salen del catálogo real. Antes venían de `mockData`, así que
+// la tienda ofrecía filtros de categorías que podían no existir en la base.
+const categories = computed(() => catalogo.rootCategories)
 
 const search = ref('')
 const selectedCategory = ref(route.query.categoria || '')
@@ -15,6 +20,10 @@ const selectedPrice = ref('all')
 const selectedSort = ref('featured')
 const inStockOnly = ref(false)
 const onSaleOnly = ref(false)
+// Filtros propios de maquillaje: el cliente busca "bases cálidas" o
+// "labiales nude", no un rango de precio.
+const selectedUndertone = ref('')
+const selectedFamily = ref('')
 
 // Initialize onSaleOnly from query param 'ofertas'
 onSaleOnly.value = route.query.ofertas === 'true'
@@ -79,10 +88,19 @@ const visibleProducts = computed(() => {
     })()
 
     const matchesStock = !inStockOnly.value || Number(product.stock ?? 0) > 0
+
+    // Un producto coincide si ALGUNO de sus tonos coincide: quien busca una
+    // base cálida quiere ver la base, aunque tenga también tonos fríos.
+    const tonos = inventoryStore.shadesWithStock(product.id)
+    const matchesUndertone = !selectedUndertone.value
+      || tonos.some((t) => String(t.undertoneId) === String(selectedUndertone.value))
+    const matchesFamily = !selectedFamily.value
+      || tonos.some((t) => String(t.shadeFamilyId) === String(selectedFamily.value))
     const hasDiscount = !!product.salePrice && Number(product.salePrice) < Number(product.price || Infinity)
     const matchesSale = !onSaleOnly.value || hasDiscount
 
     return matchesCategory && matchesSearch && matchesActive && inRange && matchesStock && matchesSale
+      && matchesUndertone && matchesFamily
   })
 
   return filtered.sort((a, b) => {
@@ -109,6 +127,8 @@ const visibleProducts = computed(() => {
 function clearFilters() {
   search.value = ''
   selectedCategory.value = ''
+  selectedUndertone.value = ''
+  selectedFamily.value = ''
   selectedPrice.value = 'all'
   selectedSort.value = 'featured'
   inStockOnly.value = false
@@ -140,6 +160,26 @@ watch(() => route.query.categoria, (category) => {
           <option v-for="category in categories" :key="category.id" :value="category.name">{{ category.name }}</option>
         </select>
 
+        <select
+          v-if="catalogo.undertones.length"
+          v-model="selectedUndertone"
+          class="w-full min-w-0 flex-1 rounded-xl border border-pink-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--primary)] md:max-w-[170px]"
+          aria-label="Filtrar por subtono"
+        >
+          <option value="">Todos los subtonos</option>
+          <option v-for="u in catalogo.undertones" :key="u.id" :value="u.id">Subtono {{ u.name }}</option>
+        </select>
+
+        <select
+          v-if="catalogo.shadeFamilies.length"
+          v-model="selectedFamily"
+          class="w-full min-w-0 flex-1 rounded-xl border border-pink-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--primary)] md:max-w-[170px]"
+          aria-label="Filtrar por familia de tono"
+        >
+          <option value="">Todas las familias</option>
+          <option v-for="f in catalogo.shadeFamilies" :key="f.id" :value="f.id">{{ f.name }}</option>
+        </select>
+
         <select v-model="selectedPrice" class="w-full min-w-0 flex-1 rounded-xl border border-pink-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--primary)] md:max-w-[180px]">
           <option v-for="option in priceOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
         </select>
@@ -163,7 +203,7 @@ watch(() => route.query.categoria, (category) => {
         </button>
       </div>
 
-      <div v-if="selectedCategory || selectedPrice !== 'all' || inStockOnly || onSaleOnly" class="mt-5 flex items-center justify-between gap-3">
+      <div v-if="selectedCategory || selectedPrice !== 'all' || inStockOnly || onSaleOnly || selectedUndertone || selectedFamily" class="mt-5 flex items-center justify-between gap-3">
         <p class="text-sm text-neutral-600">
           Filtros activos: <strong>{{ selectedCategory || 'Todas las categorías' }}</strong>
           <span class="mx-2 text-neutral-300">•</span>
