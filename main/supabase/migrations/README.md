@@ -15,6 +15,8 @@ dice en qué estado está la base.
 | 004 | `004_inventory_stock_rules.sql` | B-10 | no · recalcula saldos | ☑ 2026-09-03 |
 | 005 | `005_atomic_order_hardening.sql` | B-7, B-9, B-11 | no | ☑ 2026-09-03 |
 | 006 | `006_cleanup_legacy.sql` | S-3 | **sí — borra `public.admins`** | ☑ 2026-09-03 |
+| 007 | `007_shade_model.sql` | modelo de tonos, B-17 | no | ☑ 2026-09-03 |
+| 008 | `008_storage_imagenes.sql` | B-15 | no | ☑ 2026-09-03 |
 
 Todas aplicadas sobre el proyecto **StrawBack**. Marca la casilla cuando apliques una nueva.
 
@@ -60,6 +62,24 @@ usan. Al final recalcula todos los saldos.
 que impide el doble descuento si alguien reejecuta `schema.sql`, y crea
 `return_order_stock()` para que las devoluciones sean un movimiento
 compensatorio en vez de un `DELETE` sobre el historial.
+
+**007 — Modelo de tonos e imágenes.** Convierte `product_variants` en una ficha
+de tono de maquillaje: `swatch_hex` (chip, orden y filtros) más
+`swatch_image_url` (la verdad: un metalizado no se representa con color plano),
+`undertone_id`, `shade_family_id`, `depth` 1–100 para ordenar de clara a
+profunda, `position` e `is_default`. El precio del tono pasa a admitir NULL, que
+significa "hereda el del producto". Crea `product_images` con `variant_id`
+opcional —galería del producto y foto por tono en una sola tabla, que es lo que
+resuelve B-15— la vista `storefront_shades` con el precio ya resuelto y el saldo
+por tono, y extiende la auditoría a las tablas maestras de catálogo (B-17).
+
+Validaciones que impone: hexadecimal CSS válido, profundidad entre 1 y 100, un
+solo tono por defecto por producto y una sola imagen principal por producto.
+
+**008 — Bucket de imágenes.** Crea `product-images` en Storage con lectura
+pública y escritura solo para administradores, límite de 5 MB por archivo y
+tipos permitidos. Se versiona aquí en vez de crearse a mano en el dashboard,
+para que reconstruir el proyecto no dependa de recordar un clic.
 
 **006 — Limpieza legacy.** Normaliza los roles de `admin_profiles` y **borra**
 `public.admins`, la tabla con `password_hash` que ya no usa nadie. Ejecútala
