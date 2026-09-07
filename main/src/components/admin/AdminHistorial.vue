@@ -17,8 +17,8 @@ function orderTotal(order) {
 
 <template>
   <div class="space-y-6">
-    <h2 class="text-2xl font-bold text-black">Historial de Pedidos Entregados</h2>
-    <p class="text-sm text-neutral-500">Aquí aparecen automáticamente los pedidos que se marcan como <strong class="text-emerald-600">entregado</strong> en la sección de Pedidos.</p>
+    <h2 class="text-2xl font-bold text-black">Historial de devoluciones</h2>
+    <p class="text-sm text-neutral-500">Aquí aparecen los pedidos marcados como <strong class="text-amber-600">devuelto</strong>. Al devolverlos, el stock reingresa al inventario de venta mediante un movimiento compensatorio.</p>
 
     <div class="overflow-x-auto rounded-2xl bg-white shadow-sm">
       <table class="w-full min-w-200 text-sm">
@@ -44,7 +44,7 @@ function orderTotal(order) {
         </tbody>
       </table>
       <p v-if="!returnedOrders.length" class="p-10 text-center text-neutral-500">
-        No hay pedidos entregados todavía.
+        No hay devoluciones registradas.
       </p>
     </div>
   </div>

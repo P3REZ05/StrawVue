@@ -33,6 +33,7 @@ const isFacialCare = computed(() => ['cuidado facial', 'skincare'].includes(sele
 const supportsFinish = computed(() => ['bases', 'primer y fijador', 'labios', 'labiales', 'correctores'].includes(selectedCategory.value))
 const supportsCoverage = computed(() => selectedCategory.value === 'bases')
 const categories = computed(() => inventory.categories.filter((item) => item.active !== false))
+const brands = computed(() => inventory.brands.filter((item) => item.active !== false))
 
 onMounted(() => { inventory.init().catch(() => {}) })
 
@@ -154,6 +155,19 @@ function closeModal() {
                   <option value="">Seleccionar categoría</option>
                   <option v-for="category in categories" :key="category.id" :value="category.name">
                     {{ category.name }}
+                  </option>
+                </select>
+              </div>
+              <div>
+                <label class="mb-1 block text-sm font-bold text-neutral-700" for="brand">Marca:</label>
+                <select
+                  id="brand"
+                  v-model="newProduct.brandId"
+                  class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-pink-100"
+                >
+                  <option value="">Sin marca</option>
+                  <option v-for="brand in brands" :key="brand.id" :value="brand.id">
+                    {{ brand.name }}
                   </option>
                 </select>
               </div>

@@ -141,7 +141,7 @@ function orderTotal(order) {
         </tbody>
       </table>
       <p v-if="!activeOrders.length" class="p-10 text-center text-neutral-500">
-        No hay pedidos activos. Todos los pedidos han sido entregados.
+        No hay pedidos activos.
       </p>
     </div>
 

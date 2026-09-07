@@ -1,31 +1,70 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useCartStore } from '../stores/cart'
+import { useCatalogStore } from '../stores/catalog'
 import { useInventoryStore } from '../stores/inventory'
 import { formatCurrency } from '../utils/formatCurrency'
 
 const route = useRoute()
 const cart = useCartStore()
-const inventoryStore = useInventoryStore()
+const catalogo = useCatalogStore()
+const inventario = useInventoryStore()
+
 const quantity = ref(1)
 const added = ref(false)
-const selectedVariant = ref(null)
+const tonoElegido = ref(null)
 
 onMounted(() => {
-  inventoryStore.init().catch(() => {})
+  inventario.init().catch(() => {})
 })
 
-const product = computed(() => inventoryStore.catalogWithStock.find((item) => item.id === Number(route.params.id)))
-const selectedPrice = computed(() => selectedVariant.value?.price || product.value?.price || 0)
+const product = computed(() => inventario.catalogWithStock.find((item) => item.id === Number(route.params.id)))
+const tonos = computed(() => inventario.shadesWithStock(Number(route.params.id)))
+const galeria = computed(() => catalogo.imagesOf(Number(route.params.id)))
 
-const productVariants = computed(() => product.value?.variants || [])
-const availableStock = computed(() => Number(selectedVariant.value?.stock ?? product.value?.saleStock ?? product.value?.stock ?? 0))
+// Al abrir la ficha se preselecciona el tono marcado por defecto, o el primero
+// que tenga existencias: obligar a elegir antes de ver el precio es fricción.
+watch(tonos, (lista) => {
+  if (tonoElegido.value || !lista.length) return
+  tonoElegido.value = lista.find((t) => t.isDefault && t.stock > 0)
+    || lista.find((t) => t.stock > 0)
+    || lista[0]
+}, { immediate: true })
+
+const precio = computed(() => tonoElegido.value?.price ?? product.value?.salePrice ?? product.value?.price ?? 0)
+const disponible = computed(() =>
+  tonos.value.length ? Number(tonoElegido.value?.stock || 0) : Number(product.value?.saleStock || 0)
+)
+// Si el tono tiene foto propia se muestra esa: es lo que hace que el cliente
+// vea el labial en el color que va a comprar.
+const imagenPrincipal = computed(() =>
+  tonoElegido.value?.image || galeria.value[0]?.url || product.value?.image || ''
+)
+const hayAlgoDisponible = computed(() =>
+  tonos.value.length ? tonos.value.some((t) => t.stock > 0) : disponible.value > 0
+)
+
+watch(tonoElegido, () => { quantity.value = 1 })
+
+function subtonoDe(tono) {
+  return catalogo.optionName('undertones', tono.undertoneId)
+}
 
 function addToCart() {
-  if (!product.value || availableStock.value <= 0 || (productVariants.value.length && !selectedVariant.value)) return
+  if (!product.value || disponible.value <= 0) return
+  if (tonos.value.length && !tonoElegido.value) return
 
-  cart.add({ ...product.value, variantId: selectedVariant.value?.id, variantName: selectedVariant.value?.name, price: selectedPrice.value, stock: selectedVariant.value?.stock ?? availableStock.value, saleStock: selectedVariant.value?.stock ?? availableStock.value }, quantity.value)
+  cart.add({
+    ...product.value,
+    image: imagenPrincipal.value,
+    variantId: tonoElegido.value?.id || null,
+    variantName: tonoElegido.value ? `${tonoElegido.value.shadeCode} ${tonoElegido.value.name}`.trim() : '',
+    price: precio.value,
+    stock: disponible.value,
+    saleStock: disponible.value
+  }, quantity.value)
+
   cart.openDrawer()
   added.value = true
   window.setTimeout(() => { added.value = false }, 2200)
@@ -44,39 +83,81 @@ function addToCart() {
       </nav>
 
       <div class="grid gap-10 rounded-3xl bg-white p-5 shadow-sm sm:p-8 md:grid-cols-2">
-        <div class="flex min-h-96 items-center justify-center rounded-2xl bg-pink-50">
-          <img :src="product.image" :alt="product.name" class="max-h-125 w-full object-contain p-5" />
+        <div>
+          <div class="flex min-h-96 items-center justify-center rounded-2xl bg-pink-50">
+            <img v-if="imagenPrincipal" :src="imagenPrincipal" :alt="product.name" class="max-h-125 w-full object-contain p-5" />
+            <span v-else class="text-sm text-neutral-400">Sin imagen</span>
+          </div>
+          <div v-if="galeria.length > 1" class="mt-3 flex gap-2 overflow-x-auto">
+            <img v-for="img in galeria" :key="img.id" :src="img.url" :alt="img.alt || ''" class="size-16 shrink-0 rounded-xl border border-pink-100 object-cover" />
+          </div>
         </div>
 
         <div class="py-2">
           <p class="text-sm font-bold tracking-wider text-[var(--primary)]">{{ product.category }}</p>
           <h1 class="mt-3 text-4xl font-bold leading-tight text-black">{{ product.name }}</h1>
-          <p class="mt-5 text-3xl font-bold text-[var(--primary)]">{{ formatCurrency(selectedPrice) }}</p>
+          <p class="mt-5 text-3xl font-bold text-[var(--primary)]">{{ formatCurrency(precio) }}</p>
           <p class="mt-6 leading-8 text-neutral-600">{{ product.description }}</p>
 
-          <div v-if="productVariants.length" class="mt-6">
-            <label class="mb-2 block text-sm font-bold text-neutral-700" for="product-variant">Selecciona una variante</label>
-            <select id="product-variant" v-model="selectedVariant" class="w-full rounded-xl border border-pink-200 bg-white px-4 py-3 outline-none focus:border-[var(--primary)]">
-              <option :value="null" disabled>Elige un tono o referencia</option>
-              <option v-for="variant in productVariants" :key="variant.id" :value="variant" :disabled="variant.stock <= 0">{{ variant.name }}{{ variant.stock <= 0 ? ' - Agotado' : ` - ${variant.stock} disponibles` }}</option>
-            </select>
+          <!-- Selector de tonos -->
+          <div v-if="tonos.length" class="mt-7">
+            <div class="flex items-baseline justify-between">
+              <p class="text-sm font-bold text-neutral-700">
+                Tono:
+                <span class="text-[var(--primary)]">{{ tonoElegido ? `${tonoElegido.shadeCode} ${tonoElegido.name}` : 'elige uno' }}</span>
+              </p>
+              <span class="text-xs text-neutral-400">{{ tonos.length }} tonos</span>
+            </div>
+
+            <div class="mt-3 flex flex-wrap gap-2.5">
+              <button
+                v-for="tono in tonos" :key="tono.id" type="button"
+                class="relative size-11 rounded-full border-2 transition"
+                :class="[
+                  tonoElegido?.id === tono.id ? 'border-[var(--primary)] scale-110 shadow-md' : 'border-black/10 hover:border-black/25',
+                  tono.stock <= 0 ? 'cursor-not-allowed opacity-40' : ''
+                ]"
+                :style="tono.image ? {} : { background: tono.swatchHex || '#e5e5e5' }"
+                :disabled="tono.stock <= 0"
+                :title="`${tono.shadeCode} ${tono.name}${tono.stock <= 0 ? ' · agotado' : ''}`"
+                :aria-label="`${tono.shadeCode} ${tono.name}`"
+                :aria-pressed="tonoElegido?.id === tono.id"
+                @click="tonoElegido = tono"
+              >
+                <img v-if="tono.image" :src="tono.image" alt="" class="size-full rounded-full object-cover" />
+                <!-- Una diagonal marca el agotado sin depender solo del color,
+                     que sería invisible para quien no distingue matices. -->
+                <span v-if="tono.stock <= 0" class="pointer-events-none absolute inset-0 grid place-items-center">
+                  <span class="h-0.5 w-9 rotate-45 rounded bg-neutral-700"></span>
+                </span>
+              </button>
+            </div>
+
+            <p v-if="tonoElegido" class="mt-3 text-xs text-neutral-500">
+              <span v-if="subtonoDe(tonoElegido)">Subtono {{ subtonoDe(tonoElegido) }}</span>
+              <span v-if="subtonoDe(tonoElegido) && tonoElegido.depth"> · </span>
+              <span v-if="tonoElegido.depth">Profundidad {{ tonoElegido.depth }}/100</span>
+              <span v-if="tonoElegido.sku"> · SKU {{ tonoElegido.sku }}</span>
+            </p>
           </div>
 
-          <p class="mt-6 text-sm font-semibold" :class="availableStock ? 'text-emerald-600' : 'text-red-600'">
-            {{ availableStock ? `${availableStock} unidades disponibles` : 'Producto agotado' }}
+          <p class="mt-6 text-sm font-semibold" :class="disponible ? 'text-emerald-600' : 'text-red-600'">
+            <template v-if="disponible">{{ disponible }} unidades disponibles</template>
+            <template v-else-if="tonos.length && hayAlgoDisponible">Este tono está agotado — prueba otro</template>
+            <template v-else>Producto agotado</template>
           </p>
 
-          <div v-if="availableStock && (!productVariants.length || selectedVariant)" class="mt-7 flex gap-3">
+          <div v-if="disponible > 0" class="mt-7 flex gap-3">
             <div class="flex items-center rounded-full border border-pink-200">
               <button class="size-11 text-xl text-[var(--primary)] disabled:text-neutral-300" :disabled="quantity === 1" aria-label="Reducir cantidad" @click="quantity--">−</button>
               <span class="w-8 text-center font-bold">{{ quantity }}</span>
-              <button class="size-11 text-xl text-[var(--primary)] disabled:text-neutral-300" :disabled="quantity === availableStock" aria-label="Aumentar cantidad" @click="quantity++">+</button>
+              <button class="size-11 text-xl text-[var(--primary)] disabled:text-neutral-300" :disabled="quantity >= disponible" aria-label="Aumentar cantidad" @click="quantity++">+</button>
             </div>
             <button class="flex-1 rounded-full bg-[var(--primary)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--info)]" @click="addToCart">Agregar al carrito</button>
           </div>
 
           <p v-else class="mt-6 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
-            Este producto está agotado por el momento.
+            {{ tonos.length && hayAlgoDisponible ? 'Elige un tono disponible para continuar.' : 'Este producto está agotado por el momento.' }}
           </p>
 
           <div v-if="added" class="mt-6 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">

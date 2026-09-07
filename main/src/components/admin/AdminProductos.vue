@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import AdminAddFilter from './AdminAddFilter.vue'
 import AdminFilter from './AdminFilter.vue'
 import { useInventoryStore } from '../../stores/inventory'
@@ -10,6 +11,7 @@ const filteredProducts = ref([])
 const showModal = ref(false)
 const selectedProduct = ref(null)
 const selectedAction = ref(null)
+const router = useRouter()
 
 const formData = reactive({
   name: '',
@@ -56,27 +58,18 @@ function handleReset() {
 
 function handleProductAction(action, product) {
   if (action === 'edit') {
-    selectedProduct.value = product
-    formData.name = product.name
-    formData.description = product.description
-    formData.price = product.price
-    formData.category = product.category
-    formData.brandId = product.brandId || ''
-    formData.skinTypeId = product.skinTypeId || ''
-    formData.finishId = product.finishId || ''
-    formData.coverageId = product.coverageId || ''
-    formData.isFeatured = product.isFeatured === true
-    formData.isNew = product.isNew !== false
-    formData.isRecommended = product.isRecommended === true
-    formData.status = product.status || (product.active === false ? 'paused' : 'active')
-    showModal.value = true
+    // El modal se quedaba corto: no tenía sitio para tonos ni imágenes y
+    // obligaba a salir para crear una marca que faltara.
+    router.push(`/admin/productos/${product.id}`)
   } else if (action === 'delete') {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este producto?')) {
+    // Archivar, no borrar: el producto aparece en pedidos y movimientos
+    // anteriores y borrarlo rompería esa trazabilidad.
+    if (window.confirm(`¿Archivar "${product.name}"? Dejará de verse en la tienda pero conserva su historial.`)) {
       filteredProducts.value = filteredProducts.value.filter((p) => p.id !== product.id)
       inventoryStore.deleteProduct(product.id)
     }
   } else if (action === 'toggle') {
-    inventoryStore.updateProduct(product.id, { active: !product.active })
+    inventoryStore.toggleProductActive(product.id, !product.active)
   }
   selectedAction.value = null
 }
@@ -87,6 +80,10 @@ async function handleSaveProduct(newProduct) {
     description: newProduct.description,
     price: Number(newProduct.price),
     category: newProduct.category,
+    // El formulario ya calcula categoryId, pero antes se perdía aquí: el
+    // producto quedaba con la categoría solo como texto libre, justo lo que
+    // el modelo de datos dinámico pretende evitar.
+    categoryId: newProduct.categoryId,
     brandId: newProduct.brandId,
     skinTypeId: newProduct.skinTypeId,
     finishId: newProduct.finishId,
@@ -134,7 +131,15 @@ function closeModal() {
   <div class="space-y-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h2 class="text-2xl font-bold text-black">Productos</h2>
-      <AdminAddFilter @save="handleSaveProduct" />
+      <div class="flex items-center gap-2">
+        <button
+          class="rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--info)]"
+          @click="router.push('/admin/productos/nuevo')"
+        >
+          + Nuevo producto
+        </button>
+        <AdminAddFilter @save="handleSaveProduct" />
+      </div>
     </div>
 
     <AdminFilter @filter="handleFilter" @reset="handleReset" />
