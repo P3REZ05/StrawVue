@@ -101,6 +101,10 @@ export const useCatalogStore = defineStore('catalog', {
     coverages: [],
     undertones: [],
     shadeFamilies: [],
+    // Precios ya resueltos por la base, con la promoción aplicada.
+    storefrontShades: [],
+    storefrontProducts: [],
+    promotions: [],
     loading: false,
     error: null,
     initialized: false
@@ -159,17 +163,21 @@ export const useCatalogStore = defineStore('catalog', {
       this.error = null
 
       try {
-        const [productos, tonos, imagenes, categorias] = await Promise.all([
+        const [productos, tonos, imagenes, categorias, vitrinaTonos, vitrinaProductos] = await Promise.all([
           supabase.from('products').select('*').order('id'),
           supabase.from('product_variants').select('*').order('product_id').order('position'),
           supabase.from('product_images').select('*').order('position'),
-          supabase.from('categories').select('*').order('name')
+          supabase.from('categories').select('*').order('name'),
+          supabase.from('storefront_shades').select('*'),
+          supabase.from('storefront_products').select('*')
         ])
 
         if (productos.error) throw productos.error
         this.products = (productos.data || []).map(mapearProducto)
         this.shades = (tonos.data || []).map(mapearTono)
         this.images = imagenes.data || []
+        this.storefrontShades = vitrinaTonos.data || []
+        this.storefrontProducts = vitrinaProductos.data || []
         this.categories = (categorias.data || []).map((c) => ({
           id: c.id,
           name: c.name,
