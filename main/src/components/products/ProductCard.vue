@@ -17,6 +17,25 @@ const tonosDisponibles = computed(() => tonos.value.filter((t) => t.stock > 0).l
 // cuál. La tarjeta lleva a la ficha, que es donde se ve el color.
 const requiereElegirTono = computed(() => tonos.value.length > 0)
 
+// El precio y la promoción los resuelve la base. Si el producto tiene tonos,
+// se muestra el más barato disponible: es el gancho que hace clic al cliente.
+const precioMostrado = computed(() => {
+  if (tonos.value.length) {
+    const conStock = tonos.value.filter((t) => t.stock > 0)
+    const lista = conStock.length ? conStock : tonos.value
+    return Math.min(...lista.map((t) => t.price))
+  }
+  return props.product.promoPrice ?? props.product.salePrice ?? props.product.price
+})
+
+const enPromocion = computed(() =>
+  tonos.value.length ? tonos.value.some((t) => t.enPromocion) : props.product.enPromocion
+)
+
+const etiquetaPromo = computed(() =>
+  tonos.value.find((t) => t.promoLabel)?.promoLabel || props.product.promoLabel || ''
+)
+
 function addToCart() {
   cart.add(props.product)
   cart.openDrawer()
@@ -33,6 +52,7 @@ function addToCart() {
       />
       <span v-else class="grid h-full place-items-center text-sm text-neutral-400">Sin imagen</span>
       <span v-if="disponible === 0" class="absolute left-3 top-3 rounded-full bg-black px-3 py-1 text-xs font-bold text-white">Agotado</span>
+      <span v-else-if="etiquetaPromo" class="absolute left-3 top-3 rounded-full bg-[var(--primary)] px-3 py-1 text-xs font-bold text-white shadow">{{ etiquetaPromo }}</span>
     </RouterLink>
 
     <div class="flex flex-1 flex-col p-5">
@@ -54,7 +74,10 @@ function addToCart() {
       <p v-else class="mt-2 line-clamp-2 text-sm leading-6 text-neutral-500">{{ product.description }}</p>
 
       <div class="mt-auto pt-5">
-        <p class="text-lg font-bold text-[var(--primary)]">{{ formatCurrency(product.salePrice || product.price) }}</p>
+        <div class="flex flex-wrap items-baseline gap-2">
+          <p class="text-lg font-bold text-[var(--primary)]">{{ formatCurrency(precioMostrado) }}</p>
+          <p v-if="enPromocion" class="text-sm text-neutral-400 line-through">{{ formatCurrency(product.basePrice) }}</p>
+        </div>
         <p v-if="tonos.length" class="mt-1 text-xs text-neutral-500">
           {{ tonosDisponibles }} de {{ tonos.length }} tonos disponibles
         </p>
