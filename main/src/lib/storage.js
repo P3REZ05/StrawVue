@@ -14,6 +14,10 @@ import { optimizarImagen, resumenOptimizacion } from './imageOptimizer'
 
 export const BUCKET = 'product-images'
 
+// Los comprobantes de pago llevan nombre, telefono y datos bancarios del
+// cliente. Su bucket es PRIVADO y se accede solo con URLs firmadas.
+export const BUCKET_COMPROBANTES = 'payment-proofs'
+
 function idUnico() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID().slice(0, 8)
   return Math.random().toString(36).slice(2, 10)
@@ -157,4 +161,91 @@ export async function usoDeAlmacenamiento() {
     .from('product_images')
     .select('id', { count: 'exact', head: true })
   return { imagenes: count || 0 }
+}
+
+
+// =====================================================================
+// COMPROBANTES DE PAGO
+// =====================================================================
+
+/**
+ * Sube el comprobante de un pago (captura de Nequi, Daviplata o
+ * transferencia) al bucket privado y lo enlaza al pago del pedido.
+ *
+ * Los PDF se suben tal cual; las imagenes pasan por el optimizador con el
+ * perfil de documento, que conserva la legibilidad de los numeros.
+ */
+export async function subirComprobante(archivo, { orderId, paymentId, referencia = null } = {}) {
+  if (!orderId) throw new Error('Falta el pedido al que pertenece el comprobante.')
+
+  let cuerpo = archivo
+  let tipo = archivo.type
+  let nombre = archivo.name
+
+  if (archivo.type !== 'application/pdf') {
+    // Perfil de documento: se prioriza que los digitos sigan siendo legibles
+    // por encima del peso, asi que se usa una calidad alta.
+    const optimizada = await optimizarImagen(archivo, 'swatch')
+    cuerpo = optimizada.blob
+    tipo = optimizada.tipo
+    nombre = optimizada.nombre
+  }
+
+  const ruta = `pedidos/${orderId}/${idUnico()}-${nombre}`
+
+  const { error } = await supabase.storage
+    .from(BUCKET_COMPROBANTES)
+    .upload(ruta, cuerpo, { contentType: tipo, cacheControl: '3600', upsert: false })
+
+  if (error) {
+    if (error.message?.includes('Bucket not found')) {
+      throw new Error(`No existe el bucket "${BUCKET_COMPROBANTES}". Aplica la migracion 009.`)
+    }
+    throw new Error(`No se pudo subir el comprobante: ${error.message}`)
+  }
+
+  const actualizacion = { proof_url: ruta, proof_name: nombre }
+  if (referencia) actualizacion.reference_code = referencia
+
+  const consulta = supabase.from('payments').update(actualizacion)
+  const { data, error: errorPago } = paymentId
+    ? await consulta.eq('id', paymentId).select().single()
+    : await consulta.eq('order_id', orderId).select().single()
+
+  if (errorPago) {
+    // Sin la fila enlazada, el archivo quedaria huerfano ocupando espacio.
+    await supabase.storage.from(BUCKET_COMPROBANTES).remove([ruta])
+    throw new Error(`No se pudo enlazar el comprobante al pago: ${errorPago.message}`)
+  }
+
+  return data
+}
+
+/**
+ * Devuelve una URL temporal para ver el comprobante.
+ *
+ * El bucket es privado: no hay URL publica. La firma caduca, asi que no
+ * sirve de nada si se comparte por error.
+ */
+export async function verComprobante(rutaAlmacenamiento, segundos = 300) {
+  if (!rutaAlmacenamiento) return null
+  const { data, error } = await supabase.storage
+    .from(BUCKET_COMPROBANTES)
+    .createSignedUrl(rutaAlmacenamiento, segundos)
+  if (error) throw new Error(`No se pudo abrir el comprobante: ${error.message}`)
+  return data.signedUrl
+}
+
+/** Elimina el comprobante y lo desenlaza del pago. */
+export async function eliminarComprobante(paymentId, rutaAlmacenamiento) {
+  const { error } = await supabase
+    .from('payments')
+    .update({ proof_url: null, proof_name: null })
+    .eq('id', paymentId)
+  if (error) throw new Error(`No se pudo desenlazar el comprobante: ${error.message}`)
+
+  if (rutaAlmacenamiento) {
+    await supabase.storage.from(BUCKET_COMPROBANTES).remove([rutaAlmacenamiento])
+  }
+  return true
 }
