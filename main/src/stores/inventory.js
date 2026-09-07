@@ -70,9 +70,15 @@ export const useInventoryStore = defineStore('inventory', {
         const imagenPrincipal = catalogo.primaryImageOf(product.id)
         const imagenLegacy = product.image?.startsWith('blob:') ? '' : product.image
 
+        const vitrina = catalogo.storefrontProducts.find((f) => f.product_id === product.id)
+
         return {
           ...product,
           image: imagenPrincipal?.url || imagenLegacy || '',
+          basePrice: vitrina ? Number(vitrina.base_price) : (product.salePrice ?? product.price),
+          promoPrice: vitrina ? Number(vitrina.effective_price) : null,
+          enPromocion: vitrina ? Number(vitrina.effective_price) < Number(vitrina.base_price) : false,
+          promoLabel: vitrina?.promo_label || '',
           variants: productVariants,
           stock: productVariants.length ? variantStock : saleStock,
           saleStock: productVariants.length ? variantStock : saleStock,
@@ -95,9 +101,19 @@ export const useInventoryStore = defineStore('inventory', {
       return catalogo.shadesOf(Number(productId)).map((tono) => {
         const saldo = state.balances.find((b) => b.variantId === tono.id)
         const propia = catalogo.imagesOf(Number(productId), tono.id)[0]
+        // El precio con promoción lo calcula la base (vista storefront_shades).
+        // Aquí solo se usa como respaldo el precio heredado, por si la vista
+        // todavía no cargó.
+        const vitrina = catalogo.storefrontShades.find((f) => f.variant_id === tono.id)
+        const base = vitrina ? Number(vitrina.base_price) : catalogo.precioDeTono(tono)
+        const efectivo = vitrina ? Number(vitrina.effective_price) : base
         return {
           ...tono,
-          price: catalogo.precioDeTono(tono),
+          basePrice: base,
+          price: efectivo,
+          enPromocion: efectivo < base,
+          promoLabel: vitrina?.promo_label || '',
+          promoTitle: vitrina?.promo_title || '',
           heredaPrecio: tono.price == null,
           stock: Math.max(Number(saldo?.saleStock) || 0, 0),
           image: propia?.url || tono.swatchImageUrl || ''

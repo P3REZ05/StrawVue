@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Package,
   Settings,
+  Tag,
   ShieldCheck,
   ShoppingCart,
   Truck,
@@ -23,12 +24,12 @@ import AdminPedidos from './AdminPedidos.vue'
 import AdminHistorial from './AdminHistorial.vue'
 import AdminReportes from './AdminReportes.vue'
 import AdminConfiguracion from './AdminConfiguracion.vue'
+import AdminPromociones from './AdminPromociones.vue'
 import InventorySection from './inventory/InventorySection.vue'
 import AuditLogs from './inventory/AuditLogs.vue'
 import Suppliers from './inventory/Suppliers.vue'
 import MovementHistory from './inventory/MovementHistory.vue'
 import CatalogSettings from './CatalogSettings.vue'
-import AdminVariants from './AdminVariants.vue'
 import SalesRegister from './inventory/SalesRegister.vue'
 
 const activeSection = ref('dashboard')
@@ -98,16 +99,6 @@ async function logout() {
           <li>
             <button
               class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition"
-              :class="activeSection === 'variantes' ? 'bg-[var(--primary)] text-white' : 'text-neutral-600 hover:bg-pink-50 hover:text-[var(--primary)]'"
-              @click="activeSection = 'variantes'"
-            >
-              <ClipboardList class="size-5" />
-              <span>Variantes</span>
-            </button>
-          </li>
-          <li>
-            <button
-              class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition"
               :class="activeSection === 'inventario' ? 'bg-[var(--primary)] text-white' : 'text-neutral-600 hover:bg-pink-50 hover:text-[var(--primary)]'"
               @click="activeSection = 'inventario'"
             >
@@ -168,6 +159,16 @@ async function logout() {
           <li>
             <button
               class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition"
+              :class="activeSection === 'promociones' ? 'bg-[var(--primary)] text-white' : 'text-neutral-600 hover:bg-pink-50 hover:text-[var(--primary)]'"
+              @click="activeSection = 'promociones'"
+            >
+              <Tag class="size-5" />
+              <span>Promociones</span>
+            </button>
+          </li>
+          <li>
+            <button
+              class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition"
               :class="activeSection === 'reportes' ? 'bg-[var(--primary)] text-white' : 'text-neutral-600 hover:bg-pink-50 hover:text-[var(--primary)]'"
               @click="activeSection = 'reportes'"
             >
@@ -222,13 +223,13 @@ async function logout() {
         <AdminDashboard v-if="activeSection === 'dashboard'" />
         <AdminProductos v-else-if="activeSection === 'productos'" />
         <CatalogSettings v-else-if="activeSection === 'catalogo'" />
-        <AdminVariants v-else-if="activeSection === 'variantes'" />
         <InventorySection v-else-if="activeSection === 'inventario'" />
         <SalesRegister v-else-if="activeSection === 'ventas'" />
         <AdminPedidos v-else-if="activeSection === 'pedidos'" />
         <AdminHistorial v-else-if="activeSection === 'historial'" />
         <Suppliers v-else-if="activeSection === 'proveedores'" />
         <MovementHistory v-else-if="activeSection === 'movimientos'" />
+        <AdminPromociones v-else-if="activeSection === 'promociones'" />
         <AdminReportes v-else-if="activeSection === 'reportes'" />
         <AuditLogs v-else-if="activeSection === 'auditoria'" />
         <AdminConfiguracion v-else />

@@ -32,7 +32,11 @@ watch(tonos, (lista) => {
     || lista[0]
 }, { immediate: true })
 
-const precio = computed(() => tonoElegido.value?.price ?? product.value?.salePrice ?? product.value?.price ?? 0)
+const precio = computed(() => tonoElegido.value?.price ?? product.value?.promoPrice ?? product.value?.salePrice ?? product.value?.price ?? 0)
+const precioBase = computed(() => tonoElegido.value?.basePrice ?? product.value?.basePrice ?? precio.value)
+const enPromocion = computed(() => precioBase.value > precio.value)
+const etiquetaPromo = computed(() => tonoElegido.value?.promoLabel || product.value?.promoLabel || '')
+const tituloPromo = computed(() => tonoElegido.value?.promoTitle || '')
 const disponible = computed(() =>
   tonos.value.length ? Number(tonoElegido.value?.stock || 0) : Number(product.value?.saleStock || 0)
 )
@@ -60,6 +64,8 @@ function addToCart() {
     image: imagenPrincipal.value,
     variantId: tonoElegido.value?.id || null,
     variantName: tonoElegido.value ? `${tonoElegido.value.shadeCode} ${tonoElegido.value.name}`.trim() : '',
+    swatchHex: tonoElegido.value?.swatchHex || '',
+    sku: tonoElegido.value?.sku || '',
     price: precio.value,
     stock: disponible.value,
     saleStock: disponible.value
@@ -96,7 +102,12 @@ function addToCart() {
         <div class="py-2">
           <p class="text-sm font-bold tracking-wider text-[var(--primary)]">{{ product.category }}</p>
           <h1 class="mt-3 text-4xl font-bold leading-tight text-black">{{ product.name }}</h1>
-          <p class="mt-5 text-3xl font-bold text-[var(--primary)]">{{ formatCurrency(precio) }}</p>
+          <div class="mt-5 flex flex-wrap items-center gap-3">
+            <p class="text-3xl font-bold text-[var(--primary)]">{{ formatCurrency(precio) }}</p>
+            <p v-if="enPromocion" class="text-xl text-neutral-400 line-through">{{ formatCurrency(precioBase) }}</p>
+            <span v-if="etiquetaPromo" class="rounded-full bg-[var(--primary)] px-3 py-1 text-xs font-bold text-white">{{ etiquetaPromo }}</span>
+          </div>
+          <p v-if="tituloPromo" class="mt-1 text-sm font-semibold text-emerald-600">{{ tituloPromo }}</p>
           <p class="mt-6 leading-8 text-neutral-600">{{ product.description }}</p>
 
           <!-- Selector de tonos -->

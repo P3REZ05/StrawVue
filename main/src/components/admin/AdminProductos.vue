@@ -1,32 +1,15 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import AdminAddFilter from './AdminAddFilter.vue'
 import AdminFilter from './AdminFilter.vue'
 import { useInventoryStore } from '../../stores/inventory'
 
 const inventoryStore = useInventoryStore()
 const products = computed(() => inventoryStore.catalogWithStock)
 const filteredProducts = ref([])
-const showModal = ref(false)
-const selectedProduct = ref(null)
 const selectedAction = ref(null)
 const router = useRouter()
 
-const formData = reactive({
-  name: '',
-  description: '',
-  price: '',
-  category: '',
-  brandId: '',
-  skinTypeId: '',
-  finishId: '',
-  coverageId: '',
-  isFeatured: false,
-  isNew: true,
-  isRecommended: false,
-  status: 'active'
-})
 
 onMounted(async () => {
   try {
@@ -74,72 +57,20 @@ function handleProductAction(action, product) {
   selectedAction.value = null
 }
 
-async function handleSaveProduct(newProduct) {
-  await inventoryStore.addProduct({
-    name: newProduct.name,
-    description: newProduct.description,
-    price: Number(newProduct.price),
-    category: newProduct.category,
-    // El formulario ya calcula categoryId, pero antes se perdía aquí: el
-    // producto quedaba con la categoría solo como texto libre, justo lo que
-    // el modelo de datos dinámico pretende evitar.
-    categoryId: newProduct.categoryId,
-    brandId: newProduct.brandId,
-    skinTypeId: newProduct.skinTypeId,
-    finishId: newProduct.finishId,
-    coverageId: newProduct.coverageId,
-    netContentMl: newProduct.netContentMl,
-    isFeatured: newProduct.isFeatured,
-    isNew: newProduct.isNew,
-    isRecommended: newProduct.isRecommended,
-    status: newProduct.status,
-    image: newProduct.image ? URL.createObjectURL(newProduct.image) : '',
-    active: newProduct.status === 'active'
-  })
-  filteredProducts.value = products.value
-}
 
-async function handleEditSubmit() {
-  if (!selectedProduct.value) return
-  await inventoryStore.updateProduct(selectedProduct.value.id, {
-    name: formData.name,
-    description: formData.description,
-    price: Number(formData.price),
-    category: formData.category,
-    categoryId: inventoryStore.categories.find((category) => category.name === formData.category)?.id || '',
-    brandId: formData.brandId,
-    skinTypeId: formData.skinTypeId,
-    finishId: formData.finishId,
-    coverageId: formData.coverageId,
-    isFeatured: formData.isFeatured,
-    isNew: formData.isNew,
-    isRecommended: formData.isRecommended,
-    status: formData.status,
-    active: formData.status === 'active'
-  })
-  showModal.value = false
-  selectedProduct.value = null
-}
 
-function closeModal() {
-  showModal.value = false
-  selectedProduct.value = null
-}
 </script>
 
 <template>
   <div class="space-y-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h2 class="text-2xl font-bold text-black">Productos</h2>
-      <div class="flex items-center gap-2">
-        <button
-          class="rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--info)]"
-          @click="router.push('/admin/productos/nuevo')"
-        >
-          + Nuevo producto
-        </button>
-        <AdminAddFilter @save="handleSaveProduct" />
-      </div>
+      <button
+        class="rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--info)]"
+        @click="router.push('/admin/productos/nuevo')"
+      >
+        + Nuevo producto
+      </button>
     </div>
 
     <AdminFilter @filter="handleFilter" @reset="handleReset" />
@@ -213,88 +144,5 @@ function closeModal() {
       No hay productos que coincidan con los filtros.
     </p>
 
-    <Teleport to="body">
-      <div v-if="showModal" class="fixed inset-0 z-100">
-        <button class="absolute inset-0 bg-black/45" aria-label="Cerrar modal" @click="closeModal"></button>
-        <div class="absolute inset-0 flex items-center justify-center p-4">
-          <div class="w-full max-w-lg rounded-3xl bg-white shadow-2xl">
-            <header class="flex items-center justify-between border-b border-pink-100 px-6 py-4">
-              <h5 class="text-xl font-bold">Editar Producto</h5>
-              <button class="rounded-full p-2 text-xl hover:bg-pink-50" aria-label="Cerrar" @click="closeModal">×</button>
-            </header>
-            <div class="px-6 py-5">
-              <form class="space-y-4" @submit.prevent="handleEditSubmit">
-                <div>
-                  <label class="mb-1 block text-sm font-bold text-neutral-700" for="edit-name">Nombre:</label>
-                  <input
-                    id="edit-name"
-                    v-model="formData.name"
-                    type="text"
-                    required
-                    class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-pink-100"
-                  />
-                </div>
-                <div>
-                  <label class="mb-1 block text-sm font-bold text-neutral-700" for="edit-description">Descripción:</label>
-                  <textarea
-                    id="edit-description"
-                    v-model="formData.description"
-                    required
-                    rows="3"
-                    class="w-full resize-y rounded-xl border border-pink-100 px-4 py-2.5 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-pink-100"
-                  ></textarea>
-                </div>
-                <div class="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label class="mb-1 block text-sm font-bold text-neutral-700" for="edit-price">Precio:</label>
-                    <input
-                      id="edit-price"
-                      v-model="formData.price"
-                      type="number"
-                      required
-                      min="0"
-                      class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-pink-100"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label class="mb-1 block text-sm font-bold text-neutral-700" for="edit-category">Categoría:</label>
-                  <select
-                    id="edit-category"
-                    v-model="formData.category"
-                    required
-                    class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-pink-100"
-                  >
-                    <option value="">Seleccionar categoría</option>
-                    <option v-for="category in inventoryStore.categories" :key="category.id" :value="category.name">{{ category.name }}</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="mb-1 block text-sm font-bold text-neutral-700" for="edit-brand">Marca:</label>
-                  <select id="edit-brand" v-model="formData.brandId" class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm"><option value="">Sin marca</option><option v-for="brand in inventoryStore.brands" :key="brand.id" :value="brand.id">{{ brand.name }}</option></select>
-                </div>
-                <div class="grid gap-3 sm:grid-cols-3">
-                  <label class="flex items-center gap-2 text-sm text-neutral-700"><input v-model="formData.isFeatured" type="checkbox" class="accent-[var(--primary)]" /> Destacado</label>
-                  <label class="flex items-center gap-2 text-sm text-neutral-700"><input v-model="formData.isNew" type="checkbox" class="accent-[var(--primary)]" /> Producto nuevo</label>
-                  <label class="flex items-center gap-2 text-sm text-neutral-700"><input v-model="formData.isRecommended" type="checkbox" class="accent-[var(--primary)]" /> Recomendado</label>
-                </div>
-                <div>
-                  <label class="mb-1 block text-sm font-bold text-neutral-700" for="edit-status">Estado:</label>
-                  <select id="edit-status" v-model="formData.status" class="w-full rounded-xl border border-pink-100 px-4 py-2.5 text-sm"><option value="draft">Borrador</option><option value="active">Activo</option><option value="paused">Pausado</option><option value="archived">Archivado</option></select>
-                </div>
-                <div class="flex justify-end gap-2 pt-2">
-                  <button type="button" class="rounded-xl border border-pink-200 px-5 py-2.5 text-sm font-bold" @click="closeModal">
-                    Cancelar
-                  </button>
-                  <button type="submit" class="rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--info)]">
-                    Guardar cambios
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>

@@ -3,16 +3,26 @@ import { computed, onMounted } from 'vue'
 import { useInventoryStore } from '../../stores/inventory'
 import { useOrdersStore } from '../../stores/orders'
 import { formatCurrency } from '../../utils/formatCurrency'
+import { toDbStatus } from '../../utils/orderStatus'
 
 const inventoryStore = useInventoryStore()
 const ordersStore = useOrdersStore()
 const products = computed(() => inventoryStore.catalogWithStock)
 const orders = computed(() => ordersStore.orders)
 
+// Un pedido solo cuenta como ingreso cuando ya se cobro: pagado, enviado o
+// entregado. Antes se sumaban tambien los pendientes y los devueltos, y el
+// envio se contaba como venta, asi que el dashboard mostraba una cifra que no
+// coincidia con la de Reportes. Misma regla que la vista report_ventas_linea.
+const COBRADOS = ['paid', 'shipped', 'delivered']
+const facturados = computed(() => orders.value.filter((o) => COBRADOS.includes(toDbStatus(o.status))))
+
 const totalRevenue = computed(() => {
-  return orders.value.reduce((sum, order) => {
-    const itemsTotal = (order.items || []).reduce((itemSum, item) => itemSum + Number(item.price || 0) * Number(item.quantity || 0), 0)
-    return sum + itemsTotal + Number(order.shipping || 0)
+  return facturados.value.reduce((sum, order) => {
+    return sum + (order.items || []).reduce(
+      (itemSum, item) => itemSum + Number(item.price || 0) * Number(item.quantity || 0),
+      0
+    )
   }, 0)
 })
 
@@ -28,12 +38,21 @@ const lowStockProducts = computed(() => {
 })
 
 const bestSellers = computed(() => {
+  // Agrupamos por productId, no por el nombre guardado: `product_name` es una
+  // foto del momento de la venta ("Producto - Tono") y su formato cambio entre
+  // versiones, asi que agrupar por texto partia un mismo producto en varias
+  // filas. El nombre visible sale del catalogo actual.
   const salesByProduct = new Map()
 
-  orders.value.forEach((order) => {
+  facturados.value.forEach((order) => {
     ;(order.items || []).forEach((item) => {
-      const key = item.productName || item.name || 'Producto'
-      const previous = salesByProduct.get(key) || { name: key, quantity: 0 }
+      const key = item.productId || item.productName || item.name || 'Producto'
+      const nombreCatalogo = products.value.find((p) => p.id === item.productId)?.name
+      const previous = salesByProduct.get(key) || {
+        name: nombreCatalogo || item.productName || item.name || 'Producto',
+        quantity: 0
+      }
+      if (nombreCatalogo) previous.name = nombreCatalogo
       previous.quantity += Number(item.quantity || 0)
       salesByProduct.set(key, previous)
     })
@@ -66,8 +85,9 @@ onMounted(async () => {
 
     <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <article class="rounded-2xl bg-gradient-to-br from-pink-500 to-rose-500 p-4 text-white shadow-sm">
-        <p class="text-sm text-pink-100">Ingresos totales</p>
+        <p class="text-sm text-pink-100">Ingresos facturados</p>
         <p class="mt-2 text-3xl font-bold">{{ formatCurrency(totalRevenue) }}</p>
+        <p class="mt-1 text-xs text-pink-100">Sin envio · no cuenta devoluciones</p>
       </article>
       <article class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-pink-100">
         <p class="text-sm text-neutral-500">Pedidos pendientes</p>

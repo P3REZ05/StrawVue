@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useOrdersStore } from '../../stores/orders'
 import { formatCurrency } from '../../utils/formatCurrency'
@@ -9,12 +9,66 @@ const { activeOrders } = storeToRefs(ordersStore)
 
 const selectedOrder = ref(null)
 const selectedAction = ref(null)
+const error = ref('')
+const guardando = ref(false)
+const subiendo = ref(false)
+
+// Transportadoras habituales en Colombia. Es un datalist, no un select
+// cerrado: si aparece una nueva, se escribe y ya.
+const TRANSPORTADORAS = ['Servientrega', 'Interrapidisimo', 'Coordinadora', 'Envia', 'TCC', 'Deprisa', 'Entrega propia']
+
+const envio = reactive({ carrier: '', tracking: '', estimated: '' })
+
+watch(selectedOrder, (pedido) => {
+  error.value = ''
+  envio.carrier = pedido?.shipment?.carrier || ''
+  envio.tracking = pedido?.shipment?.tracking || ''
+  envio.estimated = pedido?.shipment?.estimated || ''
+})
+
+async function guardarEnvio() {
+  error.value = ''
+  guardando.value = true
+  try {
+    await ordersStore.saveShipment(selectedOrder.value.id, { ...envio })
+  } catch (e) {
+    error.value = e?.message || 'No se pudo guardar el envío.'
+  } finally {
+    guardando.value = false
+  }
+}
+
+async function subirComprobantePago(evento) {
+  const archivo = evento.target.files?.[0]
+  if (!archivo) return
+  error.value = ''
+  subiendo.value = true
+  try {
+    await ordersStore.uploadPaymentProof(selectedOrder.value.id, archivo)
+  } catch (e) {
+    error.value = e?.message || 'No se pudo subir el comprobante.'
+  } finally {
+    subiendo.value = false
+    evento.target.value = ''
+  }
+}
+
+async function abrirComprobante() {
+  error.value = ''
+  try {
+    const url = await ordersStore.getProofUrl(selectedOrder.value.id)
+    if (url) window.open(url, '_blank', 'noopener')
+  } catch (e) {
+    error.value = e?.message || 'No se pudo abrir el comprobante.'
+  }
+}
 
 function getStatusBadgeClass(status) {
   switch (status?.toLowerCase()) {
     case 'pendiente': return 'bg-amber-400'
     case 'pagado': return 'bg-emerald-500'
     case 'enviado': return 'bg-blue-500'
+    case 'entregado': return 'bg-emerald-600'
     case 'devuelto': return 'bg-red-500'
     default: return 'bg-neutral-400'
   }
@@ -25,6 +79,7 @@ function getStatusText(status) {
     case 'pendiente': return 'Pendiente'
     case 'pagado': return 'Pagado'
     case 'enviado': return 'Enviado'
+    case 'entregado': return 'Entregado'
     case 'devuelto': return 'Devuelto'
     default: return status || 'Desconocido'
   }
@@ -44,8 +99,14 @@ function getAvailableStatusActions(currentStatus) {
       ]
     case 'enviado':
       return [
-        { status: 'devuelto', text: 'Marcar como Devuelto', icon: 'x-circle', isDanger: true },
-        { status: 'pagado', text: 'Volver a Pagado', icon: 'check-circle', isSuccess: true }
+        // Cerrar el pedido es la accion principal: antes no existia y los
+        // envios se quedaban en "enviado" para siempre.
+        { status: 'entregado', text: 'Marcar como Entregado', icon: 'check-circle', isSuccess: true },
+        { status: 'devuelto', text: 'Marcar como Devuelto', icon: 'x-circle', isDanger: true }
+      ]
+    case 'entregado':
+      return [
+        { status: 'devuelto', text: 'Registrar devolución', icon: 'x-circle', isDanger: true }
       ]
     case 'devuelto':
       return []
@@ -54,9 +115,15 @@ function getAvailableStatusActions(currentStatus) {
   }
 }
 
-function handleStatusChange(orderId, newStatus) {
-  ordersStore.updateStatus(orderId, newStatus)
+async function handleStatusChange(orderId, newStatus) {
+  error.value = ''
   selectedAction.value = null
+  try {
+    await ordersStore.updateStatus(orderId, newStatus)
+  } catch (e) {
+    // Antes esto se ignoraba y la fila mostraba un estado que nunca persistio.
+    error.value = e?.message || 'No se pudo cambiar el estado del pedido.'
+  }
 }
 
 function orderSubtotal(order) {
@@ -145,6 +212,8 @@ function orderTotal(order) {
       </p>
     </div>
 
+    <p v-if="error && !selectedOrder" class="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">{{ error }}</p>
+
     <!-- Order Details Modal -->
     <Teleport to="body">
       <div v-if="selectedOrder" class="fixed inset-0 z-100">
@@ -167,6 +236,68 @@ function orderTotal(order) {
                   <p><strong>Notas:</strong> {{ selectedOrder.customer?.notes || 'N/A' }}</p>
                 </div>
               </div>
+
+              <!-- Pago -->
+              <div class="mb-5">
+                <h6 class="border-b border-pink-100 pb-2 font-bold text-[var(--primary)]">Pago</h6>
+                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                  <p class="text-sm"><strong>Método:</strong> {{ selectedOrder.payment?.method || 'transferencia' }}</p>
+                  <p class="text-sm"><strong>Estado:</strong> {{ selectedOrder.payment?.status || 'pendiente' }}</p>
+                </div>
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    v-if="selectedOrder.payment?.proofPath"
+                    class="rounded-full bg-[var(--primary)] px-4 py-2 text-xs font-bold text-white transition hover:bg-[var(--info)]"
+                    @click="abrirComprobante"
+                  >
+                    Ver comprobante
+                  </button>
+                  <label class="cursor-pointer rounded-full border border-pink-200 px-4 py-2 text-xs font-bold text-neutral-700 transition hover:bg-pink-50">
+                    {{ subiendo ? 'Subiendo…' : (selectedOrder.payment?.proofPath ? 'Reemplazar comprobante' : 'Adjuntar comprobante') }}
+                    <input type="file" accept="image/*,application/pdf" class="hidden" :disabled="subiendo" @change="subirComprobantePago" />
+                  </label>
+                  <span v-if="selectedOrder.payment?.proofName" class="text-xs text-neutral-500">{{ selectedOrder.payment.proofName }}</span>
+                </div>
+                <p class="mt-2 text-xs text-neutral-400">
+                  El comprobante se guarda en un almacenamiento privado: lleva datos bancarios del cliente y solo lo ve un administrador.
+                </p>
+              </div>
+
+              <!-- Envío -->
+              <div class="mb-5">
+                <h6 class="border-b border-pink-100 pb-2 font-bold text-[var(--primary)]">Envío</h6>
+                <div class="mt-3 grid gap-3 sm:grid-cols-3">
+                  <label class="text-xs font-bold text-neutral-700">Transportadora
+                    <input v-model="envio.carrier" list="transportadoras" class="mt-1 w-full rounded-xl border border-pink-100 px-3 py-2 text-sm font-normal" placeholder="Servientrega" />
+                    <datalist id="transportadoras">
+                      <option v-for="t in TRANSPORTADORAS" :key="t" :value="t" />
+                    </datalist>
+                  </label>
+                  <label class="text-xs font-bold text-neutral-700">Número de guía
+                    <input v-model="envio.tracking" class="mt-1 w-full rounded-xl border border-pink-100 px-3 py-2 text-sm font-normal" placeholder="Para que el cliente rastree" />
+                  </label>
+                  <label class="text-xs font-bold text-neutral-700">Entrega estimada
+                    <input v-model="envio.estimated" type="date" class="mt-1 w-full rounded-xl border border-pink-100 px-3 py-2 text-sm font-normal" />
+                  </label>
+                </div>
+                <div class="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    :disabled="guardando"
+                    class="rounded-full bg-[var(--primary)] px-4 py-2 text-xs font-bold text-white transition hover:bg-[var(--info)] disabled:opacity-50"
+                    @click="guardarEnvio"
+                  >
+                    {{ guardando ? 'Guardando…' : 'Guardar envío' }}
+                  </button>
+                  <span v-if="selectedOrder.shipment?.shippedAt" class="text-xs text-neutral-500">
+                    Despachado el {{ new Date(selectedOrder.shipment.shippedAt).toLocaleDateString('es-CO') }}
+                  </span>
+                  <span v-if="selectedOrder.shipment?.deliveredAt" class="text-xs font-semibold text-emerald-600">
+                    Entregado el {{ new Date(selectedOrder.shipment.deliveredAt).toLocaleDateString('es-CO') }}
+                  </span>
+                </div>
+              </div>
+
+              <p v-if="error" class="mb-4 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">{{ error }}</p>
 
               <h6 class="border-b border-pink-100 pb-2 font-bold text-[var(--primary)]">Productos</h6>
               <div class="mt-3 overflow-x-auto">
