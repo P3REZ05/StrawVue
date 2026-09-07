@@ -17,6 +17,10 @@ dice en qué estado está la base.
 | 006 | `006_cleanup_legacy.sql` | S-3 | **sí — borra `public.admins`** | ☑ 2026-09-03 |
 | 007 | `007_shade_model.sql` | modelo de tonos, B-17 | no | ☑ 2026-09-03 |
 | 008 | `008_storage_imagenes.sql` | B-15 | no | ☑ 2026-09-03 |
+| 009 | `009_comprobantes_pago.sql` | comprobantes de pago | no | ☑ 2026-09-03 |
+| 010 | `010_promociones.sql` | modulo de promociones | no | ☑ 2026-09-03 |
+| 011 | `011_pedido_precio_servidor.sql` | B-18 (precio del cliente) | no | ☑ 2026-09-03 |
+| 012 | `012_reportes.sql` | reportes y margen real | no | ☑ 2026-09-03 |
 
 Todas aplicadas sobre el proyecto **StrawBack**. Marca la casilla cuando apliques una nueva.
 
@@ -84,6 +88,37 @@ para que reconstruir el proyecto no dependa de recordar un clic.
 **006 — Limpieza legacy.** Normaliza los roles de `admin_profiles` y **borra**
 `public.admins`, la tabla con `password_hash` que ya no usa nadie. Ejecútala
 solo después de confirmar que entras al panel con Supabase Auth.
+
+**007 — Modelo de tonos.** Tablas maestras `undertones` y `shade_families`, ocho
+columnas de tono en `product_variants` (swatch hex e imagen, subtono,
+profundidad 1-100, familia), `product_images` y la vista `storefront_shades`.
+Es la base del editor de producto de página completa.
+
+**008 — Bucket de imágenes.** Bucket público `product-images`.
+
+**009 — Comprobantes de pago.** Bucket **privado** `payment-proofs`. Privado a
+propósito: un comprobante lleva datos bancarios del cliente, así que se sirve
+con URL firmada y nunca por enlace público.
+
+**010 — Promociones.** Modelo de promociones con vigencia y alcance, más las
+funciones `promo_vigente`, `precio_base`, `promo_para_producto`,
+`precio_efectivo` y `config_numero`, y las vistas de tienda que ya devuelven el
+precio con descuento aplicado.
+
+**011 — Precio calculado en el servidor.** Reescribe `create_order_with_stock`
+para que el precio salga de la base y no del navegador. Antes el RPC confiaba
+en el `unit_price` que mandaba el cliente: se comprobó enviando `unit_price: 1`
+y el pedido se registró por ese valor. Ahora el cliente manda producto,
+variante y cantidad; el precio lo pone el servidor.
+
+**012 — Reportes y margen.** `costo_promedio()` (costo promedio ponderado de las
+compras), la vista unificada `report_ventas_linea` que junta el canal online y
+el punto físico en una sola forma, los agregados
+`report_por_producto` / `report_por_tono` / `report_por_dia` /
+`report_por_categoria`, `report_riesgo_stock` y la columna
+`orders.discount_total`. El margen se expresa sobre el ingreso. Las líneas de
+venta cuentan solo pedidos en `paid`, `shipped` o `delivered`: un pedido
+pendiente todavía no es ingreso y uno devuelto dejó de serlo.
 
 ---
 
