@@ -1,213 +1,178 @@
-<script setup>
-import { computed } from 'vue'
-import { useInventoryStore } from '../../stores/inventory'
-import { useOrdersStore } from '../../stores/orders'
+﻿<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { AlertTriangle, PackageX, RefreshCw, Snowflake, TrendingDown } from 'lucide-vue-next'
+import { useReportsStore, PERIODOS_DISPONIBLES } from '../../stores/reports'
 import { formatCurrency } from '../../utils/formatCurrency'
+import LineaTiempo from './reportes/LineaTiempo.vue'
+import BarrasUtilidad from './reportes/BarrasUtilidad.vue'
 
-const inventoryStore = useInventoryStore()
-const ordersStore = useOrdersStore()
+const reportes = useReportsStore()
+const error = ref('')
+const verTabla = ref(false)
 
-const products = computed(() => inventoryStore.catalogWithStock || [])
-const orders = computed(() => ordersStore.orders || [])
-
-const totalRevenue = computed(() => {
-  return orders.value.reduce((sum, order) => {
-    const itemsTotal = (order.items || []).reduce(
-      (itemSum, item) => itemSum + Number(item.price || 0) * Number(item.quantity || 0),
-      0
-    )
-    return sum + itemsTotal + Number(order.shipping || 0)
-  }, 0)
+onMounted(async () => {
+  try {
+    await reportes.init()
+  } catch (e) {
+    error.value = e?.message || 'No se pudieron cargar los reportes.'
+  }
 })
 
-const totalOrders = computed(() => orders.value.length)
-const soldUnits = computed(() => {
-  return orders.value.reduce((sum, order) => {
-    return sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0)
-  }, 0)
-})
+const t = computed(() => reportes.totales)
 
-const averageTicket = computed(() => {
-  return totalOrders.value ? totalRevenue.value / totalOrders.value : 0
-})
+// Cada alerta lleva icono y texto: el color nunca carga el significado solo.
+const ALERTAS = {
+  agotado:         { texto: 'Agotado',              icono: PackageX,      clase: 'text-[#d03b3b]' },
+  reponer_vitrina: { texto: 'Reponer desde bodega', icono: AlertTriangle, clase: 'text-[#ec835a]' },
+  stock_bajo:      { texto: 'Stock bajo',           icono: TrendingDown,  clase: 'text-[#fab219]' },
+  sin_rotacion:    { texto: 'Sin rotación',         icono: Snowflake,     clase: 'text-[#52514e]' }
+}
 
-const pendingOrders = computed(() => orders.value.filter((order) => ['pendiente', 'pending'].includes(String(order.status).toLowerCase())).length)
-const paidOrders = computed(() => orders.value.filter((order) => ['pagado', 'paid'].includes(String(order.status).toLowerCase())).length)
-const shippedOrders = computed(() => orders.value.filter((order) => ['enviado', 'shipped'].includes(String(order.status).toLowerCase())).length)
-const returnedOrders = computed(() => orders.value.filter((order) => ['devuelto', 'returned'].includes(String(order.status).toLowerCase())).length)
-
-const lowStockCount = computed(() => {
-  return products.value.filter((product) => Number(product.stock || 0) <= 5).length
-})
-
-const totalStock = computed(() => {
-  return products.value.reduce((sum, product) => sum + Number(product.stock || 0), 0)
-})
-
-const statusBreakdown = computed(() => {
-  const breakdown = { pendiente: 0, pagado: 0, enviado: 0, devuelto: 0 }
-
-  orders.value.forEach((order) => {
-    const normalized = String(order.status || '').toLowerCase()
-    if (breakdown[normalized] !== undefined) breakdown[normalized] += 1
-    else if (normalized === 'pending') breakdown.pendiente += 1
-    else if (normalized === 'paid') breakdown.pagado += 1
-    else if (normalized === 'shipped') breakdown.enviado += 1
-    else if (normalized === 'returned') breakdown.devuelto += 1
-  })
-
-  return breakdown
-})
-
-const topProducts = computed(() => {
-  const salesByProduct = new Map()
-
-  orders.value.forEach((order) => {
-    ;(order.items || []).forEach((item) => {
-      const key = item.productName || item.name || 'Producto'
-      const current = salesByProduct.get(key) || { name: key, units: 0, revenue: 0 }
-      current.units += Number(item.quantity || 0)
-      current.revenue += Number(item.price || 0) * Number(item.quantity || 0)
-      salesByProduct.set(key, current)
-    })
-  })
-
-  return [...salesByProduct.values()].sort((a, b) => b.units - a.units || b.revenue - a.revenue).slice(0, 5)
-})
-
-const operationalAlerts = computed(() => {
-  return products.value
-    .filter((product) => Number(product.stock || 0) <= 5)
-    .slice(0, 4)
-    .map((product) => ({
-      id: product.id,
-      name: product.name,
-      stock: Number(product.stock || 0),
-      category: product.category || 'Sin categoría'
-    }))
-})
+async function recargar() {
+  error.value = ''
+  try { await reportes.refresh() } catch (e) { error.value = e?.message || 'No se pudo recargar.' }
+}
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex items-center justify-between gap-3">
+  <div
+    class="space-y-6"
+    style="
+      --viz-surface: #ffffff;
+      --viz-ink: #0b0b0b;
+      --viz-ink-2: #52514e;
+      --viz-muted: #898781;
+      --viz-grid: #e1e0d9;
+      --viz-baseline: #c3c2b7;
+      --viz-s1: #2a78d6;
+      --viz-s2: #1baf7a;
+    "
+  >
+    <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 class="text-2xl font-bold text-black">Reportes operativos</h2>
-        <p class="mt-1 text-sm text-neutral-500">Visión general del negocio: ventas, pedidos, inventario y riesgo comercial.</p>
+        <h2 class="text-2xl font-bold text-black">Reportes</h2>
+        <p class="mt-1 text-sm text-neutral-500">
+          Utilidad real: lo facturado menos el costo promedio ponderado de las compras.
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <select
+          :value="reportes.periodo" class="rounded-xl border border-pink-100 bg-white px-3 py-2 text-sm"
+          @change="reportes.setPeriodo($event.target.value)"
+        >
+          <option v-for="p in PERIODOS_DISPONIBLES" :key="p.value" :value="p.value">{{ p.label }}</option>
+        </select>
+        <button class="rounded-full border border-pink-200 p-2 text-neutral-600 hover:text-[var(--primary)]" title="Recargar" @click="recargar">
+          <RefreshCw class="size-4" />
+        </button>
       </div>
     </div>
 
-    <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <article class="rounded-2xl bg-gradient-to-br from-pink-500 to-rose-500 p-4 text-white shadow-sm">
-        <p class="text-sm text-pink-100">Ingresos</p>
-        <p class="mt-2 text-3xl font-bold">{{ formatCurrency(totalRevenue) }}</p>
+    <p v-if="error" class="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">{{ error }}</p>
+
+    <p v-if="!t.costoConfiable && t.unidades" class="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+      <strong>Ojo con el margen.</strong> Hay productos vendidos sin compra registrada: su costo cuenta como cero
+      y el margen aparenta ser del 100 %. Registra esas compras para que la utilidad sea real.
+    </p>
+
+    <!-- Cifras principales: números grandes, no gráficos -->
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <article class="rounded-2xl bg-white p-5 shadow-sm">
+        <p class="text-xs font-bold uppercase tracking-wider text-neutral-500">Ingresos</p>
+        <p class="mt-2 text-3xl font-bold text-black">{{ formatCurrency(t.ingreso) }}</p>
+        <p class="mt-1 text-xs text-neutral-500">{{ t.documentos }} {{ t.documentos === 1 ? 'venta' : 'ventas' }} · {{ t.unidades }} {{ t.unidades === 1 ? 'unidad' : 'unidades' }}</p>
       </article>
-      <article class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-pink-100">
-        <p class="text-sm text-neutral-500">Pedidos</p>
-        <p class="mt-2 text-3xl font-bold text-neutral-800">{{ totalOrders }}</p>
+      <article class="rounded-2xl bg-white p-5 shadow-sm">
+        <p class="text-xs font-bold uppercase tracking-wider text-neutral-500">Utilidad</p>
+        <p class="mt-2 text-3xl font-bold" :class="t.utilidad >= 0 ? 'text-[#0ca30c]' : 'text-[#d03b3b]'">
+          {{ formatCurrency(t.utilidad) }}
+        </p>
+        <p class="mt-1 text-xs text-neutral-500">Costo {{ formatCurrency(t.costo) }}</p>
       </article>
-      <article class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-pink-100">
-        <p class="text-sm text-neutral-500">Unidades vendidas</p>
-        <p class="mt-2 text-3xl font-bold text-neutral-800">{{ soldUnits }}</p>
+      <article class="rounded-2xl bg-white p-5 shadow-sm">
+        <p class="text-xs font-bold uppercase tracking-wider text-neutral-500">Margen</p>
+        <p class="mt-2 text-3xl font-bold text-black">{{ t.margen.toFixed(1) }}%</p>
+        <p class="mt-1 text-xs text-neutral-500">De cada peso vendido</p>
       </article>
-      <article class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-pink-100">
-        <p class="text-sm text-neutral-500">Ticket promedio</p>
-        <p class="mt-2 text-3xl font-bold text-neutral-800">{{ formatCurrency(averageTicket) }}</p>
+      <article class="rounded-2xl bg-white p-5 shadow-sm">
+        <p class="text-xs font-bold uppercase tracking-wider text-neutral-500">Ticket promedio</p>
+        <p class="mt-2 text-3xl font-bold text-black">{{ formatCurrency(t.ticketPromedio) }}</p>
+        <p class="mt-1 text-xs text-neutral-500">Por venta</p>
       </article>
-    </section>
+    </div>
 
-    <section class="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
-      <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-pink-100">
-        <h3 class="mb-4 text-lg font-bold text-black">Estados de pedidos</h3>
-        <div class="space-y-3">
-          <div class="flex items-center justify-between rounded-xl bg-neutral-50 px-3 py-2">
-            <span class="text-sm text-neutral-600">Pendientes</span>
-            <span class="text-lg font-bold text-neutral-800">{{ statusBreakdown.pendiente }}</span>
-          </div>
-          <div class="flex items-center justify-between rounded-xl bg-neutral-50 px-3 py-2">
-            <span class="text-sm text-neutral-600">Pagados</span>
-            <span class="text-lg font-bold text-neutral-800">{{ statusBreakdown.pagado }}</span>
-          </div>
-          <div class="flex items-center justify-between rounded-xl bg-neutral-50 px-3 py-2">
-            <span class="text-sm text-neutral-600">Enviados</span>
-            <span class="text-lg font-bold text-neutral-800">{{ statusBreakdown.enviado }}</span>
-          </div>
-          <div class="flex items-center justify-between rounded-xl bg-neutral-50 px-3 py-2">
-            <span class="text-sm text-neutral-600">Devueltos</span>
-            <span class="text-lg font-bold text-neutral-800">{{ statusBreakdown.devuelto }}</span>
-          </div>
-        </div>
+    <div class="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+      <LineaTiempo :datos="reportes.serieDiaria" />
+    </div>
+
+    <div class="grid gap-5 lg:grid-cols-2">
+      <div class="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+        <BarrasUtilidad
+          :filas="reportes.productosRankeados"
+          titulo="Utilidad por producto"
+          descripcion="Ordenado por lo que deja, no por lo que factura."
+        />
       </div>
-
-      <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-pink-100">
-        <h3 class="mb-4 text-lg font-bold text-black">Inventario</h3>
-        <div class="space-y-3">
-          <div class="flex items-center justify-between rounded-xl bg-pink-50 px-3 py-2">
-            <span class="text-sm text-neutral-600">Total stock</span>
-            <span class="text-lg font-bold text-[var(--primary)]">{{ totalStock }}</span>
-          </div>
-          <div class="flex items-center justify-between rounded-xl bg-amber-50 px-3 py-2">
-            <span class="text-sm text-neutral-600">Stock crítico</span>
-            <span class="text-lg font-bold text-amber-700">{{ lowStockCount }}</span>
-          </div>
-          <div class="flex items-center justify-between rounded-xl bg-emerald-50 px-3 py-2">
-            <span class="text-sm text-neutral-600">Pedidos pagados</span>
-            <span class="text-lg font-bold text-emerald-700">{{ paidOrders }}</span>
-          </div>
-          <div class="flex items-center justify-between rounded-xl bg-sky-50 px-3 py-2">
-            <span class="text-sm text-neutral-600">Pedidos enviados</span>
-            <span class="text-lg font-bold text-sky-700">{{ shippedOrders }}</span>
-          </div>
-        </div>
+      <div class="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+        <BarrasUtilidad
+          :filas="reportes.tonosRankeados"
+          titulo="Utilidad por tono"
+          descripcion="Cuál de tus tonos deja plata y cuál solo ocupa bodega."
+          usar-swatch
+        />
       </div>
-    </section>
+    </div>
 
-    <section class="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
-      <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-pink-100">
-        <h3 class="mb-4 text-lg font-bold text-black">Top productos</h3>
-        <div class="space-y-3">
-          <div
-            v-for="product in topProducts"
-            :key="product.name"
-            class="flex items-center justify-between rounded-xl bg-neutral-50 px-3 py-2"
-          >
-            <div>
-              <p class="font-semibold text-black">{{ product.name }}</p>
-              <p class="text-xs text-neutral-500">{{ product.units }} unidades</p>
-            </div>
-            <span class="text-sm font-bold text-[var(--primary)]">{{ formatCurrency(product.revenue) }}</span>
-          </div>
-          <p v-if="!topProducts.length" class="text-sm text-neutral-500">Aún no hay ventas registradas.</p>
-        </div>
-      </div>
-
-      <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-pink-100">
-        <h3 class="mb-4 text-lg font-bold text-black">Alertas operativas</h3>
-        <div class="space-y-3">
-          <div
-            v-for="item in operationalAlerts"
-            :key="item.id"
-            class="flex items-center justify-between rounded-xl bg-amber-50 px-3 py-2"
-          >
-            <div>
-              <p class="font-semibold text-black">{{ item.name }}</p>
-              <p class="text-xs text-neutral-500">{{ item.category }}</p>
-            </div>
-            <span class="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">{{ item.stock }}</span>
-          </div>
-          <p v-if="!operationalAlerts.length" class="text-sm text-neutral-500">No hay alertas de inventario.</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-pink-100">
-      <h3 class="mb-4 text-lg font-bold text-black">Resumen ejecutivo</h3>
-      <ul class="space-y-2 text-sm text-neutral-600">
-        <li>• El negocio tiene {{ pendingOrders }} pedidos pendientes y {{ paidOrders }} por confirmar o preparar.</li>
-        <li>• {{ shippedOrders }} pedidos ya fueron enviados, y {{ returnedOrders }} han sido devueltos.</li>
-        <li>• Hay {{ lowStockCount }} productos con stock en riesgo y requieren revisión de compra o reposición.</li>
-        <li>• El ticket promedio se mantiene en {{ formatCurrency(averageTicket) }}, con foco en los productos más vendidos.</li>
+    <!-- Alertas de inventario: icono + texto, nunca solo color -->
+    <div v-if="reportes.alertas.length" class="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+      <h3 class="text-sm font-bold text-black">Requiere atención</h3>
+      <ul class="mt-3 divide-y divide-pink-50">
+        <li v-for="a in reportes.alertas" :key="`${a.product_id}-${a.variant_id}`" class="flex items-center justify-between gap-3 py-2.5 text-sm">
+          <span class="flex min-w-0 items-center gap-2">
+            <component :is="ALERTAS[a.alerta]?.icono" class="size-4 shrink-0" :class="ALERTAS[a.alerta]?.clase" />
+            <span class="truncate font-semibold">{{ a.producto }}</span>
+            <span v-if="a.tono" class="shrink-0 text-neutral-500">{{ a.tono }}</span>
+          </span>
+          <span class="shrink-0 text-xs">
+            <span class="font-bold" :class="ALERTAS[a.alerta]?.clase">{{ ALERTAS[a.alerta]?.texto }}</span>
+            <span class="ml-2 text-neutral-500">venta {{ a.stock_venta }} · bodega {{ a.stock_bodega }}</span>
+          </span>
+        </li>
       </ul>
-    </section>
+    </div>
+
+    <!-- Vista de tabla: obligatoria cuando un color queda bajo 3:1 de contraste -->
+    <div class="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+      <button class="text-sm font-bold text-[var(--primary)]" @click="verTabla = !verTabla">
+        {{ verTabla ? 'Ocultar' : 'Ver' }} los datos en tabla
+      </button>
+      <div v-if="verTabla" class="mt-4 overflow-x-auto">
+        <table class="w-full min-w-150 text-sm">
+          <thead>
+            <tr class="border-b border-pink-100 text-left text-xs font-bold uppercase tracking-wider text-neutral-500">
+              <th class="py-2 pr-3">Producto</th>
+              <th class="py-2 pr-3">Tono</th>
+              <th class="py-2 pr-3">Unidades</th>
+              <th class="py-2 pr-3">Ingreso</th>
+              <th class="py-2 pr-3">Utilidad</th>
+              <th class="py-2">Margen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="f in reportes.tonosRankeados" :key="f.key" class="border-b border-pink-50">
+              <td class="py-2 pr-3">{{ f.etiqueta }}</td>
+              <td class="py-2 pr-3 text-neutral-500">{{ f.tono }}</td>
+              <td class="py-2 pr-3">{{ f.unidades }}</td>
+              <td class="py-2 pr-3">{{ formatCurrency(f.ingreso) }}</td>
+              <td class="py-2 pr-3 font-semibold">{{ formatCurrency(f.utilidad) }}</td>
+              <td class="py-2">{{ f.margen.toFixed(1) }}%</td>
+            </tr>
+            <tr v-if="!reportes.tonosRankeados.length">
+              <td colspan="6" class="py-8 text-center text-neutral-500">Sin ventas en este período.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </template>

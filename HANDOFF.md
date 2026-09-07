@@ -3,32 +3,41 @@
 Estado vivo del proyecto. Se actualiza **al final de cada sesión de trabajo**.
 Para saber *cómo* trabajar en el repo, lee `CLAUDE.md`. Este archivo dice *qué sigue*.
 
-- **Última actualización:** 3 de septiembre de 2026
+- **Última actualización:** 7 de septiembre de 2026
 - **Rama activa:** `dev` (remoto `P3REZ05/StrawVue`)
 - **Fase:** cierre operativo. No se agregan features hasta validar el flujo real.
 - **Sprint A:** ✅ **completo.** Código verificado y las 6 migraciones aplicadas en Supabase.
-- **Sprint B:** en curso. Panel validado y catálogo sembrado; falta el circuito de inventario y el pedido real.
-- **Refactor del módulo de productos:** etapas 1–3 de 8 completas (ver `docs/refactor-modulo-productos.md`).
+- **Sprint B:** ✅ **cerrado.** El pedido funciona de punta a punta, verificado dos veces con datos reales.
+- **Refactor de productos:** etapas 1–5 y 7 completas. Faltan la 6 (trazabilidad) y la 8 (retirar legacy).
+- **Ciclo del pedido:** cerrado (estado entregado, datos de envío, comprobante de pago).
+- **Promociones:** motor funcionando, con precios calculados en el servidor.
+- **Reportes y margen:** ✅ construido. Utilidad real contra el costo promedio ponderado de las compras.
 - **Proyecto Supabase real:** `StrawBack` (`gjchbbvqoigvhildddfw`), org `Strawberry-Makeup`.
 
 ---
 
 ## 0. LO PRIMERO AL RETOMAR
 
-Sprint A cerrado y verificado en producción. Sprint B a medias.
+**El proyecto ya vende.** El pedido se probó completo dos veces con datos reales:
+carrito con tonos → pedido → pago → envío con guía → entregado, y también la
+variante con devolución. El stock se descuenta y reingresa por tono, y el
+historial de movimientos queda intacto.
 
-**Ya validado en la app real (3 sep):** la tienda pública carga, el panel entra,
-las 12 secciones renderizan sin un solo error de consola, la auditoría muestra
-registros, y **el panel escribe de verdad** — se crearon categoría (`Contorno`),
-marca (`Atenea`), proveedor y producto (`Brochas Ani-k`), todos confirmados en la
-base. Antes de las migraciones, esas escrituras habrían fallado en silencio.
+Migraciones aplicadas: **001 a 012**. Ninguna pendiente.
 
-**Lo que falta del Sprint B:** el circuito de inventario completo, que sigue sin
-probarse nunca — variantes → orden de compra → entrada a bodega → transferencia
-parcial a venta → pedido desde el storefront → pago → envío → devolución.
+**Lo que bloquea vender de verdad hoy:**
 
-**Bloqueante para lanzar:** B-15, las imágenes de producto no se suben a ninguna
-parte (§2b).
+1. **No hay fotos de producto.** La infraestructura está completa (bucket,
+   optimizador, subida con arrastrar y soltar) pero el catálogo está vacío de
+   imágenes. Esto es tuyo, no de Claude.
+2. ~~**No se ve el margen.**~~ Resuelto: la sección **Reportes** muestra ingreso,
+   costo, utilidad y margen por día, producto, tono y categoría, más las alertas
+   de stock. Antes de aplicar un descuento ya se puede ver qué margen se está
+   comiendo.
+
+**Pedidos de prueba en la base:** ORD-1 (devuelto), ORD-2 (entregado) y algunos
+más de las pruebas del cupón. Se pueden dejar: sirven de referencia y el stock
+ya volvió a su sitio.
 
 ## 1. Qué se hizo en el Sprint A
 
@@ -197,49 +206,23 @@ que volvió al menos una. `orders.js → updateStatus` ya lo hace.
 
 ---
 
-## 2c. Qué falta para que sea un panel profesional de maquillaje
+## 2c. Qué falta
 
-Revisión crítica del 3 de septiembre. Por orden de dolor:
+Ordenado por lo que más duele. Se descartó por decisión del usuario todo lo
+relativo a lotes, vencimiento y registro sanitario INVIMA.
 
-**1. Hay DOS formularios de producto compitiendo — limpiar ya.**
-El editor nuevo (`/admin/productos/:id`) convive con el modal viejo:
-`AdminAddFilter` sigue con su botón "Añadir" en la misma barra, y
-`AdminProductos.vue` conserva su modal de edición (línea ~217). Alguien va a
-usar el equivocado y guardará un producto sin tonos y con imagen `blob:`.
-También sobra la sección **"Variantes"** de la barra lateral: los tonos se
-editan dentro del producto.
-
-**2. Trazabilidad regulatoria — el hueco más serio.**
-Verificado con INVIMA: los cosméticos en Colombia requieren **Notificación
-Sanitaria Obligatoria** (vigencia 7 años); la etiqueta exige **número de lote** y
-**fecha de vencimiento cuando la estabilidad es ≤24 meses**; y **el distribuidor
-asume las mismas obligaciones que el titular de la NSO** en cuanto a seguridad
-del producto.
-
-El esquema no tiene ni NSO, ni lote, ni vencimiento. Consecuencias: ante un
-retiro de producto no se sabe a qué clientes llamar, se puede vender producto
-vencido, y en una inspección no hay cómo demostrar qué lote salió a quién.
-
-Encaja natural en el modelo actual: **un lote es un atributo del movimiento de
-compra**, entra con la mercancía y viaja hasta el pedido.
-
-**3. Comprobantes de pago sin interfaz.** `payments.proof_url` y `proof_name`
-existen desde el primer esquema. Con Storage ya funcionando es barato.
-
-**4. `prompt()` para decisiones críticas.** Pasar de bodega a venta —el paso que
-decide qué ve el cliente— usa un `prompt()` del navegador
-(`SaleInventory.vue:54`), igual que el cambio de precio (línea 85). No deja ver
-el stock por tono ni cancelar bien.
-
-**5. Duplicar producto.** Una segunda base son 40 tonos tecleados otra vez.
-
-**6. Promociones en `localStorage`.** `promotions` y `promotion_products` llevan
-sin usar desde el primer esquema. Para maquillaje las promos son el motor.
-
-**7. Un solo rol.** Quien despache pedidos ve costos, márgenes y proveedores.
-
-**8. Móvil.** El panel son tablas de diez columnas y se administrará desde el
-teléfono.
+| # | Qué | Por qué |
+|---|---|---|
+| 1 | **Fotos reales** | Tarea del usuario. Sin fotos no se vende |
+| 2 | Quitar los `prompt()` del navegador | `SaleInventory.vue:54` y `:85`. Transferir a venta —el paso que decide qué ve el cliente— se hace con un diálogo del navegador |
+| 3 | Duplicar producto | Una segunda base son 40 tonos tecleados otra vez |
+| 4 | Buscador y paginación en productos | Con 200 productos la lista colapsa |
+| 5 | Combos y 2x1 | Modelados (`buy_quantity`, `get_quantity`) pero sin evaluar |
+| 6 | Trazabilidad del producto (etapa 6) | Los datos están en `audit_logs` e `inventory_movements`; falta la pantalla |
+| 7 | Retirar legacy (etapa 8) | `product_variants.stock`, `products.image` |
+| 8 | Roles | Quien despache pedidos ve costos, márgenes y proveedores |
+| 9 | Móvil | Tablas de diez columnas y se administrará desde el teléfono |
+| 10 | Tests, lint, CI | `npm run build` es la única red |
 
 ---
 
@@ -328,9 +311,13 @@ reales, que es lo único que nunca se ha hecho.
 
 | Fecha | Sesión | Qué se hizo |
 |---|---|---|
+| 2026-09-07 | Claude | **Reportes y margen.** Migración 012: `costo_promedio()` (promedio ponderado de compras), vista unificada `report_ventas_linea` que junta online y punto físico, agregados por producto, tono, día y categoría, `report_riesgo_stock` y `orders.discount_total`. Pantalla de Reportes con fichas, gráficos SVG propios (sin dependencia de librería), vista de tabla y paleta validada con el verificador de daltonismo. Números cuadrados contra la base: $113.700 de ingreso, $54.000 de costo, 52,5 % de margen. Corregidos dos fallos de agrupación que partían un mismo producto en varias filas por leer el nombre guardado en la venta (`"Producto — Tono"`, con separador cambiado entre versiones) en vez del catálogo: uno en Reportes y otro en el Dashboard. En el Dashboard, además, los ingresos sumaban pedidos pendientes y devueltos y contaban el envío como venta, así que no coincidían con Reportes; ahora ambos usan la misma regla (`paid`/`shipped`/`delivered`, sin envío). Corregido también el gráfico de línea: con un solo día dibujaba un `moveto` y nada más, así que el panel se veía vacío justo en el caso normal al arrancar; ahora marca los puntos y etiqueta el valor directamente. |
 | 2026-08-23 | — | Revisión de arquitectura contra el código; 14 diferencias documentadas en `docs/arquitectura-proyecto-strawberry.md` §10.3 |
 | 2026-09-03 | Claude | Lectura completa del proyecto. Se crearon `CLAUDE.md` y `HANDOFF.md`. Identificados B-1 a B-4, S-1 a S-3, D-1 a D-11 |
 | 2026-09-03 | Claude | **Sprint A — código.** Encontrados 5 bugs críticos más (B-7 a B-11) y, al reproducir la base en PostgreSQL local, el B-13 de las políticas RLS perdidas. 6 migraciones numeradas e idempotentes, verificadas con pruebas de flujo, concurrencia e idempotencia. Frontend: modo demo eliminado, cálculo de stock corregido, auditoría unificada, mapeo de estados centralizado. `npm run build` pasa. |
+| 2026-09-03 | Claude | **Promociones y precios en el servidor.** Migraciones 010 y 011. Descubierto que el RPC aceptaba `unit_price` y `total` del navegador: se probó el ataque (pedir 2 unidades a $1) y ahora el servidor cobra el precio real. Motor de promociones con prioridad, vigencia, cupones con código, compra mínima, usos máximos y envío gratis; verificado en Postgres local con siete casos. Panel de promociones conectado a la base. Aclarado que los "banners del inicio" no son descuentos. Corregido el modelo: el cupón es una propiedad, no un tipo. |
+| 2026-09-03 | Claude | **Ciclo del pedido cerrado.** Migración 009 con bucket PRIVADO para comprobantes de pago (llevan datos bancarios del cliente; se ven con URLs firmadas de 5 minutos). Añadido el estado `entregado`, que no existía: los pedidos se quedaban en "enviado" para siempre. Captura de transportadora, guía y fecha estimada. Verificado con ORD-2 de punta a punta. |
+| 2026-09-03 | Claude | **Prueba end-to-end del pedido, por fin.** ORD-1 completo: tono 02 Arena, stock 8→6, pago, envío, devolución, stock 6→8 con movimiento compensatorio y la salida original intacta. Encontrado y corregido que el tono no aparecía en ninguna parte del pedido: ni en el carrito, ni en el mensaje de WhatsApp, ni en `order_items.product_name`. Quien empaca no sabía qué tono sacar. |
 | 2026-09-03 | Claude | **Refactor de productos, etapas 4, 5 y 7.** Editor a página completa con seis secciones, creación al vuelo de marca y categoría, atributos condicionales por categoría y subida real de imágenes. Editor de tonos con chips, pegado por lotes y reordenación. Vitrina: chips de color, imagen que cambia con el tono, stock por tono y filtros por subtono y familia. Verificado en vivo creando `Base Velvet Skin` con 5 tonos: SKU automáticos, subtonos resueltos, herencia de precio (5 tonos pasaron de $0 a $38.900 con una sola edición), tonos agotados deshabilitados y filtro de subtono devolviendo 1 de 3 productos. Corregido `variant.stock`, columna legacy que ya no se carga y hacía que la ficha mostrara "undefined disponibles". |
 | 2026-09-03 | Claude | **Refactor de productos, etapas 1–3.** Investigación sobre modelado de tonos en cosmética (swatch sobre nombre, atributos gobernados, código NC/NW = subtono + profundidad). Migración 007 con `undertones`, `shade_families`, 8 columnas de tono, `product_images` y la vista `storefront_shades`; probada en Postgres local con casos de hex inválido, profundidad fuera de rango, tono por defecto duplicado e imagen principal duplicada. Migración 008: bucket con políticas. Optimizador de imágenes medido con Delta-E. `catalog.js` extraído con parser de lotes de tonos probado en 9 casos. Panel verificado en vivo: 12 secciones sin errores nuevos. |
 | 2026-09-03 | Claude | **Sprint B — arranque.** Verificada la app real contra la base migrada: tienda pública y las 12 secciones del panel sin errores de consola, auditoría con registros, y escrituras confirmadas (categoría, marca, proveedor, producto). Corregido el manejo de errores del panel y los textos de la sección Historial. Encontrados B-15 (imágenes en `blob:`), B-16 (atributos dinámicos sin selector) y B-17 (auditoría sin tablas maestras); B-14 corregido: el alta ya guarda `category_id` y `brand_id`. |

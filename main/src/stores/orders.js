@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { supabase } from '../lib/supabase'
 import { logAudit } from '../lib/auditLog'
-import { isActive, isReturned, toDbStatus, toUiStatus } from '../utils/orderStatus'
+import { subirComprobante, verComprobante } from '../lib/storage'
+import { isActive, isClosed, isDelivered, isReturned, toDbStatus, toUiStatus } from '../utils/orderStatus'
 import { useInventoryStore } from './inventory'
 
 export const useOrdersStore = defineStore('orders', {
@@ -16,7 +17,10 @@ export const useOrdersStore = defineStore('orders', {
     activeOrders: (state) => state.orders.filter((order) => isActive(order.status)),
     // Antes se llamaba `deliveredOrders` pero filtraba devoluciones:
     // el nombre mentía y cualquier reporte que lo usara quedaba mal.
-    returnedOrders: (state) => state.orders.filter((order) => isReturned(order.status))
+    returnedOrders: (state) => state.orders.filter((order) => isReturned(order.status)),
+    deliveredOrders: (state) => state.orders.filter((order) => isDelivered(order.status)),
+    // Todo lo que ya cerró su ciclo, para el historial.
+    closedOrders: (state) => state.orders.filter((order) => isClosed(order.status))
   },
   actions: {
     async init() {
@@ -27,7 +31,7 @@ export const useOrdersStore = defineStore('orders', {
       try {
         const { data: orders, error } = await supabase
           .from('orders')
-          .select('*, customer:customers(*), order_items(*)')
+          .select('*, customer:customers(*), order_items(*), payments(*), shipments(*)')
           .order('created_at', { ascending: false })
 
         if (error) throw error
@@ -54,7 +58,31 @@ export const useOrdersStore = defineStore('orders', {
           shipping: Number(order.shipping_cost) || 0,
           total: Number(order.total) || 0,
           status: toUiStatus(order.status),
-          createdAt: order.created_at?.slice(0, 10) || ''
+          createdAt: order.created_at?.slice(0, 10) || '',
+          // El pago y el envio viajan con el pedido: sin ellos el panel no
+          // puede cerrar el ciclo ni decirle al cliente donde va su compra.
+          payment: order.payments?.[0]
+            ? {
+                id: order.payments[0].id,
+                method: order.payments[0].payment_method,
+                status: order.payments[0].status,
+                amount: Number(order.payments[0].amount) || 0,
+                proofPath: order.payments[0].proof_url || '',
+                proofName: order.payments[0].proof_name || '',
+                reference: order.payments[0].reference_code || ''
+              }
+            : null,
+          shipment: order.shipments?.[0]
+            ? {
+                id: order.shipments[0].id,
+                carrier: order.shipments[0].carrier || '',
+                tracking: order.shipments[0].tracking_number || '',
+                estimated: order.shipments[0].estimated_delivery || '',
+                shippedAt: order.shipments[0].shipped_at || '',
+                deliveredAt: order.shipments[0].delivered_at || '',
+                status: order.shipments[0].status || 'pending'
+              }
+            : null
         }))
 
         this.initialized = true
@@ -69,6 +97,17 @@ export const useOrdersStore = defineStore('orders', {
       }
     },
 
+    /**
+     * Crea el pedido.
+     *
+     * El cliente manda QUÉ quiere y CUÁNTO; el precio lo decide el servidor.
+     * Antes se enviaba `unit_price` y `total` desde el navegador, así que
+     * cualquiera podía pedir una base de $38.900 por $1. Con promociones eso
+     * empeoraba: un total distinto al de lista dejaba de ser sospechoso.
+     *
+     * Devuelve los importes que realmente quedaron guardados, para que la
+     * interfaz muestre lo mismo que la base y no su propia estimación.
+     */
     async addOrder(orderData) {
       const inventoryStore = useInventoryStore()
       const stockValidation = inventoryStore.validateOrderItems(orderData.items || [])
@@ -77,21 +116,14 @@ export const useOrdersStore = defineStore('orders', {
         throw new Error(stockValidation.issues[0]?.message || 'No hay suficiente stock para completar este pedido.')
       }
 
-      // La reserva real la hace la base en una sola transacción; esta
-      // validación previa solo evita un viaje inútil al servidor.
       const { data: order, error } = await supabase.rpc('create_order_with_stock', {
         customer_data: orderData.customer,
-        order_data: {
-          subtotal: orderData.subtotal,
-          shipping: orderData.shipping,
-          total: orderData.total
-        },
+        // Solo el cupón viaja aquí: los importes los calcula la base.
+        order_data: { coupon: orderData.coupon || null },
         items_data: (orderData.items || []).map((item) => ({
           product_id: item.productId || item.id || null,
           variant_id: item.variantId || null,
-          product_name: item.name || item.productName,
-          quantity: item.quantity,
-          unit_price: item.price
+          quantity: item.quantity
         })),
         payment_method: orderData.paymentMethod || 'transfer'
       }).single()
@@ -103,17 +135,17 @@ export const useOrdersStore = defineStore('orders', {
         orderNumber: order.order_number,
         customer: orderData.customer,
         items: orderData.items,
-        subtotal: orderData.subtotal,
-        shipping: orderData.shipping,
-        total: orderData.total,
+        subtotal: Number(order.subtotal) || 0,
+        discount: Number(order.discount) || 0,
+        shipping: Number(order.shipping) || 0,
+        total: Number(order.total) || 0,
+        promoNote: order.promo_note || '',
         status: 'pendiente',
         createdAt: new Date().toISOString().slice(0, 10)
       }
       this.orders.unshift(newOrder)
 
-      // El stock cambió en la base: refrescar los saldos locales.
       await inventoryStore.refreshBalances()
-
       return newOrder
     },
 
@@ -152,6 +184,14 @@ export const useOrdersStore = defineStore('orders', {
         if (shipmentError) throw new Error('El pedido se marcó como enviado, pero no se pudo actualizar el envío.')
       }
 
+      if (databaseStatus === 'delivered') {
+        const { error: entregaError } = await supabase
+          .from('shipments')
+          .update({ status: 'delivered', delivered_at: new Date().toISOString() })
+          .eq('order_id', orderId)
+        if (entregaError) throw new Error('El pedido se marcó como entregado, pero no se pudo cerrar el envío.')
+      }
+
       if (databaseStatus === 'returned') {
         // Reingreso por movimiento compensatorio, no borrando historial.
         // El store de inventario ya refresca los saldos al terminar.
@@ -171,6 +211,81 @@ export const useOrdersStore = defineStore('orders', {
       })
 
       return true
+    },
+
+    /** Guarda transportadora, guía y fecha estimada del envío. */
+    async saveShipment(orderId, { carrier, tracking, estimated } = {}) {
+      const { data, error } = await supabase
+        .from('shipments')
+        .update({
+          carrier: carrier?.trim() || null,
+          tracking_number: tracking?.trim() || null,
+          estimated_delivery: estimated || null
+        })
+        .eq('order_id', orderId)
+        .select()
+        .single()
+
+      if (error) throw new Error(`No se pudieron guardar los datos del envío: ${error.message}`)
+
+      const pedido = this.orders.find((o) => o.id === orderId)
+      if (pedido) {
+        pedido.shipment = {
+          ...(pedido.shipment || {}),
+          id: data.id,
+          carrier: data.carrier || '',
+          tracking: data.tracking_number || '',
+          estimated: data.estimated_delivery || '',
+          status: data.status
+        }
+      }
+
+      await logAudit({
+        table: 'shipments',
+        recordId: data.id,
+        action: 'SHIPPING_UPDATED',
+        newData: { carrier: data.carrier, tracking: data.tracking_number },
+        note: `Envío actualizado: ${data.carrier || 'sin transportadora'} ${data.tracking_number || ''}`.trim()
+      })
+
+      return pedido?.shipment
+    },
+
+    /** Sube el comprobante de pago al bucket privado y lo enlaza. */
+    async uploadPaymentProof(orderId, archivo, referencia = null) {
+      const pedido = this.orders.find((o) => o.id === orderId)
+      const pago = await subirComprobante(archivo, {
+        orderId,
+        paymentId: pedido?.payment?.id,
+        referencia
+      })
+
+      if (pedido) {
+        pedido.payment = {
+          ...(pedido.payment || {}),
+          id: pago.id,
+          proofPath: pago.proof_url,
+          proofName: pago.proof_name,
+          reference: pago.reference_code || ''
+        }
+      }
+
+      await logAudit({
+        table: 'payments',
+        recordId: pago.id,
+        action: 'PROOF_UPLOADED',
+        newData: { proof_name: pago.proof_name },
+        note: 'Comprobante de pago adjuntado'
+      })
+
+      return pedido?.payment
+    },
+
+    /** URL temporal para ver el comprobante. El bucket es privado. */
+    async getProofUrl(orderId) {
+      const pedido = this.orders.find((o) => o.id === orderId)
+      if (!pedido?.payment?.proofPath) return null
+      return verComprobante(pedido.payment.proofPath)
     }
   }
 })

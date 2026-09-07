@@ -5,12 +5,13 @@
 // distintas en cada copia, lo que garantizaba que tarde o temprano
 // divergieran.
 
-export const ORDER_STATUSES = ['pending', 'paid', 'shipped', 'returned']
+export const ORDER_STATUSES = ['pending', 'paid', 'shipped', 'delivered', 'returned']
 
 const DB_TO_UI = {
   pending: 'pendiente',
   paid: 'pagado',
   shipped: 'enviado',
+  delivered: 'entregado',
   returned: 'devuelto'
 }
 
@@ -33,8 +34,22 @@ export function isReturned(status) {
   return toDbStatus(status) === 'returned'
 }
 
-/** True si el pedido sigue en curso (ni devuelto ni cancelado). */
+/** True si el pedido ya termino su ciclo: entregado, devuelto o cancelado. */
+export function isClosed(status) {
+  return ['delivered', 'returned', 'cancelled'].includes(toDbStatus(status))
+}
+
+/**
+ * True si el pedido sigue requiriendo atencion.
+ *
+ * Un pedido entregado ya no es "activo": antes se quedaba en enviado para
+ * siempre y la bandeja de pendientes se llenaba de cosas terminadas.
+ */
 export function isActive(status) {
-  const dbStatus = toDbStatus(status)
-  return dbStatus !== 'returned' && dbStatus !== 'cancelled'
+  return !isClosed(status)
+}
+
+/** True si el pedido se completo con exito. */
+export function isDelivered(status) {
+  return toDbStatus(status) === 'delivered'
 }

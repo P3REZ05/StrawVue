@@ -94,7 +94,7 @@ onMounted(() => {
   <div class="space-y-6">
     <div>
       <h2 class="text-2xl font-bold text-black">Configuración</h2>
-      <p class="text-sm text-neutral-500">Administradores del sistema, configuración de la cuenta y promociones del home.</p>
+      <p class="text-sm text-neutral-500">Administradores del sistema, configuración de la cuenta y Banners del inicio.</p>
     </div>
 
     <div class="overflow-x-auto rounded-2xl bg-white shadow-sm">
@@ -125,7 +125,7 @@ onMounted(() => {
     <div class="rounded-2xl bg-white p-5 shadow-sm">
       <div class="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h3 class="text-xl font-bold text-black">Promociones del home</h3>
+          <h3 class="text-xl font-bold text-black">Banners del inicio</h3>
           <p class="text-sm text-neutral-500">Sube imágenes que se mostrarán en el carrusel superior.</p>
         </div>
       </div>
