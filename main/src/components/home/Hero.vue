@@ -1,31 +1,56 @@
-<script setup>
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+﻿<script setup>
+import { onMounted, onBeforeUnmount, ref } from 'vue'
 import bannerPrincipal from '../../assets/images/bannerprincipal.webp'
-import { defaultPromotions } from '../../data/mockData'
+import { useSettingsStore } from '../../stores/settings'
 
-const STORAGE_KEY = 'strawberry-home-promotions'
+// Los banners salían de `localStorage`, con las imágenes en base64 dentro.
+// Eso significaba que la administradora configuraba la portada, la veía en
+// su propio navegador, y ningún cliente la veía jamás. Ahora vienen de
+// `home_banners` y sus imágenes de Storage, como el resto del catálogo.
+//
+// EL BANNER ES SOLO LA IMAGEN. Nada de título, texto destacado ni «Ver
+// colección» escritos encima: eso va dentro del volante que se diseña aparte,
+// con su tipografía y su color. Superponer texto web a una imagen que ya lleva
+// el suyo tapaba justo la parte que importaba de la foto. El banner entero es
+// el enlace; el título se conserva como nombre interno y como texto
+// alternativo para el lector de pantalla.
+const settings = useSettingsStore()
 const slides = ref([])
 const currentSlide = ref(0)
 let autoRotate = null
 
-function loadPromotions() {
-  const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored)
-      if (Array.isArray(parsed) && parsed.length) {
-        slides.value = parsed.filter((slide) => slide.active !== false)
-        return
-      }
-    } catch (error) {
-      console.warn('No se pudo cargar las promociones guardadas.', error)
-    }
+// Si no hay banners configurados, el carrusel muestra el banner de la marca
+// en vez de quedarse en blanco.
+const SLIDE_POR_DEFECTO = {
+  id: 'default',
+  title: 'Strawberry Makeup',
+  subtitle: 'Belleza que se siente como tú',
+  accent: '',
+  link: '/tienda',
+  image: bannerPrincipal
+}
+
+async function loadPromotions() {
+  try {
+    await settings.init()
+  } catch {
+    // La portada no puede quedarse en blanco porque falle la red.
   }
 
-  slides.value = defaultPromotions.map((slide) => ({
-    ...slide,
-    image: slide.image || bannerPrincipal
-  }))
+  const activos = settings.bannersActivos
+  slides.value = activos.length
+    ? activos.map((b) => ({
+        id: b.id,
+        title: b.title,
+        subtitle: b.subtitle || '',
+        accent: b.accent || '',
+        link: b.link || '/tienda',
+        image: b.image_url || bannerPrincipal
+      }))
+    : [SLIDE_POR_DEFECTO]
+
+  // Si se borró un banner mientras rotaba, el índice puede quedar fuera.
+  if (currentSlide.value >= slides.value.length) currentSlide.value = 0
 }
 
 function nextSlide() {
@@ -48,42 +73,81 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (autoRotate) clearInterval(autoRotate)
 })
-
-const activeSlide = computed(() => slides.value[currentSlide.value] || slides.value[0])
 </script>
 
 <template>
   <section aria-label="Promociones de Strawberry Makeup" class="relative mx-auto max-w-7xl px-3 py-3 sm:px-5 lg:px-8">
     <div v-if="slides.length" class="relative overflow-hidden rounded-[28px] bg-neutral-100 shadow-[0_18px_40px_rgba(228,107,160,0.15)]">
-      <img
-        :src="activeSlide.image || bannerPrincipal"
-        :alt="activeSlide.title || 'Banner principal de Strawberry Makeup'"
-        class="h-[34vh] min-h-[220px] w-full object-cover object-center sm:h-[42vh] lg:h-[50vh]"
-      />
+      <!--
+        La tira. Están TODOS los banners uno al lado del otro y lo que se mueve
+        es la tira entera con `translateX`: así el cambio se ve como un
+        desplazamiento y no como un parpadeo. Antes se cambiaba el `src` de una
+        sola imagen, y en una foto grande eso es un fogonazo blanco mientras
+        carga la siguiente.
 
-      <div class="absolute inset-0 bg-gradient-to-r from-black/60 via-black/25 to-black/10" />
-
-      <div class="absolute inset-x-0 top-1/2 max-w-xl -translate-y-1/2 px-5 text-white sm:px-8 lg:left-10 lg:px-0">
-        <p v-if="activeSlide.accent" class="mb-2 text-[10px] font-bold tracking-[0.25em] text-pink-200 uppercase sm:text-[11px]">{{ activeSlide.accent }}</p>
-        <h1 class="text-2xl font-black leading-tight sm:text-3xl lg:text-5xl">{{ activeSlide.title || 'Strawberry Makeup' }}</h1>
-        <p v-if="activeSlide.subtitle" class="mt-2 max-w-md text-xs text-white/85 sm:text-sm">{{ activeSlide.subtitle }}</p>
-        <a v-if="activeSlide.link" :href="activeSlide.link" class="mt-4 inline-flex rounded-full bg-[var(--primary)] px-4 py-2 text-xs font-bold text-white shadow-lg shadow-pink-300/40 transition hover:bg-[var(--info)] sm:px-5 sm:py-2.5 sm:text-sm">Ver colección</a>
-      </div>
-
-      <button type="button" class="absolute left-3 top-1/2 z-10 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-lg font-bold text-neutral-700 shadow-md transition hover:bg-white sm:flex" aria-label="Anterior promocion" @click="prevSlide">‹</button>
-      <button type="button" class="absolute right-3 top-1/2 z-10 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-lg font-bold text-neutral-700 shadow-md transition hover:bg-white sm:flex" aria-label="Siguiente promocion" @click="nextSlide">›</button>
-
-      <div class="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
-        <button
+        `transform` es además lo único que el navegador puede animar sin
+        recalcular el diseño de la página, así que va suave también en un
+        celular de gama baja.
+      -->
+      <div
+        class="tira flex"
+        :style="{ transform: `translateX(-${currentSlide * 100}%)` }"
+      >
+        <a
           v-for="(slide, index) in slides"
           :key="slide.id || index"
-          type="button"
-          :aria-label="`Ir a la promoción ${index + 1}`"
-          class="h-2 w-2 rounded-full transition"
-          :class="index === currentSlide ? 'bg-white shadow-sm' : 'bg-white/50'"
-          @click="currentSlide = index"
-        />
+          :href="slide.link || '/tienda'"
+          class="w-full shrink-0"
+          :aria-label="slide.title || 'Ver la promoción'"
+          :aria-hidden="index !== currentSlide"
+          :tabindex="index === currentSlide ? 0 : -1"
+        >
+          <img
+            :src="slide.image || bannerPrincipal"
+            :alt="slide.title || 'Banner principal de Strawberry Makeup'"
+            class="h-[34vh] min-h-[220px] w-full object-cover object-center sm:h-[42vh] lg:h-[50vh]"
+            :loading="index === 0 ? 'eager' : 'lazy'"
+            draggable="false"
+          />
+        </a>
       </div>
+
+      <template v-if="slides.length > 1">
+        <button type="button" class="absolute left-3 top-1/2 z-10 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-lg font-bold text-neutral-700 shadow-md transition hover:bg-white sm:flex" aria-label="Anterior promocion" @click="prevSlide">‹</button>
+        <button type="button" class="absolute right-3 top-1/2 z-10 hidden size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-lg font-bold text-neutral-700 shadow-md transition hover:bg-white sm:flex" aria-label="Siguiente promocion" @click="nextSlide">›</button>
+
+        <div class="absolute bottom-0 left-1/2 z-10 flex -translate-x-1/2 items-center">
+          <button
+            v-for="(slide, index) in slides"
+            :key="slide.id || index"
+            type="button"
+            :aria-label="`Ir a la promoción ${index + 1}`"
+            :aria-current="index === currentSlide"
+            class="grid size-10 place-items-center"
+            @click="currentSlide = index"
+          >
+            <span
+              class="block h-2 rounded-full transition-all"
+              :class="index === currentSlide ? 'w-6 bg-white shadow-sm' : 'w-2 bg-white/60'"
+            />
+          </button>
+        </div>
+      </template>
     </div>
   </section>
 </template>
+
+<style scoped>
+.tira {
+  transition: transform 600ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Quien tiene desactivado el movimiento en su sistema no quiere que la
+   portada se deslice sola cada cinco segundos: el banner cambia, pero de
+   golpe, sin recorrido. */
+@media (prefers-reduced-motion: reduce) {
+  .tira {
+    transition: none;
+  }
+}
+</style>

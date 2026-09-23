@@ -36,7 +36,11 @@ const PERFILES = {
   // Miniaturas para tarjetas de catálogo.
   miniatura: { maxLado: 400, calidad: 0.82, probarSinPerdida: false },
   // Logos y gráficos planos: sin pérdida siempre.
-  grafico: { maxLado: 1200, calidad: 1, probarSinPerdida: true }
+  grafico: { maxLado: 1200, calidad: 1, probarSinPerdida: true },
+  // Banners y tarjetas de portada: se ven a ancho completo y en pantallas
+  // grandes, así que aguantan más lado que una foto de catálogo. Antes esto
+  // usaba el perfil `producto` y una tarjeta destacada se veía blanda.
+  banner: { maxLado: 2000, calidad: 0.86, probarSinPerdida: false }
 }
 
 const TIPOS_ACEPTADOS = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif']
@@ -66,7 +70,7 @@ function crearLienzo(ancho, alto) {
 
 function aBlob(lienzo, tipo, calidad) {
   if (lienzo.convertToBlob) return lienzo.convertToBlob({ type: tipo, quality: calidad })
-  return new Promise((resolve) => lienzo.toBlob(resolve, tipo, calidad))
+  return new Promise((resolve) => { lienzo.toBlob(resolve, tipo, calidad) })
 }
 
 /**

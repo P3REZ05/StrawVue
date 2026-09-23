@@ -1,6 +1,10 @@
 ﻿<script setup>
+import { computed, onMounted } from 'vue'
 import pexels from '../assets/images/pexels.jpg'
-import { socialLinks, storeSettings } from '../data/mockData'
+import { useSettingsStore } from '../stores/settings'
+
+const settings = useSettingsStore()
+onMounted(() => { settings.init().catch(() => {}) })
 
 const values = [
   { title: 'Belleza para expresarte', text: 'Creemos que el maquillaje es una forma de jugar, crear y mostrar tu estilo personal.' },
@@ -8,18 +12,21 @@ const values = [
   { title: 'Atención cercana', text: 'Estamos para resolver tus dudas y ayudarte a encontrar productos que disfrutes usar.' }
 ]
 
-const contactMethods = [
+// `computed`, no una constante: los datos de contacto se cargan de la base
+// después del primer render, así que una lista fija se quedaría con el
+// WhatsApp vacío.
+const contactMethods = computed(() => [
   {
     title: 'WhatsApp',
     description: 'Responde rápido para asesoría, pedidos y confirmación',
-    href: `https://wa.me/${storeSettings.whatsappNumber}`,
+    href: `https://wa.me/${settings.whatsapp}`,
     label: 'Chatea con nosotros',
     accent: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30'
   },
   {
     title: 'Instagram',
     description: 'Descubre looks, lanzamientos y promociones exclusivas',
-    href: socialLinks.instagram,
+    href: settings.redes.instagram,
     label: '@strawberry_makeup05',
     accent: 'bg-pink-500/15 text-pink-200 border-pink-400/30'
   },
@@ -30,7 +37,7 @@ const contactMethods = [
     label: 'strawberrymakeupstore@gmail.com',
     accent: 'bg-violet-500/15 text-violet-200 border-violet-400/30'
   }
-]
+])
 </script>
 
 <template>
@@ -46,18 +53,18 @@ const contactMethods = [
         </div>
 
         <div class="mt-10 grid gap-4 md:grid-cols-3">
-          <a v-for="method in contactMethods" :key="method.title" :href="method.href" target="_blank" rel="noopener noreferrer" class="group rounded-3xl border border-white/10 bg-white/5 p-5 text-left transition duration-200 hover:-translate-y-1 hover:border-[var(--primary)] hover:bg-white/8">
+          <a v-for="method in contactMethods" :key="method.title" :href="method.href" target="_blank" rel="noopener noreferrer" class="group min-w-0 rounded-3xl border border-white/10 bg-white/5 p-5 text-left transition duration-200 hover:-translate-y-1 hover:border-[var(--primary)] hover:bg-white/8">
             <div :class="`mb-4 inline-flex rounded-full border px-3 py-1.5 text-xs font-bold ${method.accent}`">
               {{ method.title }}
             </div>
             <p class="text-sm leading-6 text-white/70">{{ method.description }}</p>
-            <p class="mt-4 text-sm font-semibold text-white group-hover:text-[var(--primary)]">{{ method.label }}</p>
+            <p class="mt-4 break-words text-sm font-semibold text-white group-hover:text-[var(--primary)]">{{ method.label }}</p>
           </a>
         </div>
 
         <div class="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
           <a class="inline-flex rounded-full bg-[var(--primary)] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-pink-300/40 transition hover:bg-[var(--info)]" href="mailto:strawberrymakeupstore@gmail.com">Contáctanos</a>
-          <a class="inline-flex rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:border-[var(--primary)] hover:text-[var(--primary)]" :href="`https://wa.me/${storeSettings.whatsappNumber}`" target="_blank" rel="noopener noreferrer">Chat por WhatsApp</a>
+          <a class="inline-flex rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:border-[var(--primary)] hover:text-[var(--primary)]" :href="`https://wa.me/${settings.whatsapp}`" target="_blank" rel="noopener noreferrer">Chat por WhatsApp</a>
         </div>
       </div>
     </section>
