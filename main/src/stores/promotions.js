@@ -18,7 +18,12 @@ import { useCatalogStore } from './catalog'
 export const TIPOS = [
   { value: 'percent',  label: 'Porcentaje de descuento', ayuda: 'Resta un % al precio. Ej: 20 = 20% menos.' },
   { value: 'fixed',    label: 'Monto fijo de descuento', ayuda: 'Resta un valor en pesos al precio.' },
-  { value: 'shipping', label: 'Envío gratis',            ayuda: 'Quita el costo de envío desde la compra mínima.' }
+  { value: 'shipping', label: 'Envío gratis',            ayuda: 'Quita el costo de envío desde la compra mínima.' },
+  // El combo no descuenta un precio, descuenta unidades: por eso no usa
+  // `value` sino `buyQuantity` / `getQuantity`, y por eso el cálculo no cabe
+  // en `precio_efectivo` —que responde por UNA unidad— sino en
+  // `descuento_combos`, que mira el carrito entero.
+  { value: 'bundle',   label: 'Combo (2x1, 3x2…)',        ayuda: 'Lleva N, paga M. Regala las unidades más baratas del carrito.' }
 ]
 
 export const ALCANCES = [
@@ -39,6 +44,8 @@ function mapear(fila) {
     // Con código = cupón: no se aplica solo, el cliente lo escribe.
     requiresCode: Boolean(fila.code),
     minPurchase: fila.min_purchase != null ? Number(fila.min_purchase) : null,
+    buyQuantity: fila.buy_quantity ?? null,
+    getQuantity: fila.get_quantity ?? null,
     startsAt: fila.starts_at ? fila.starts_at.slice(0, 10) : '',
     endsAt: fila.ends_at ? fila.ends_at.slice(0, 10) : '',
     priority: fila.priority ?? 0,
@@ -127,6 +134,16 @@ export const usePromotionsStore = defineStore('promotions', {
       if (promo.type === 'fixed' && promo.value <= 0) {
         return 'El monto de descuento debe ser mayor a cero.'
       }
+      if (promo.type === 'bundle') {
+        const lleva = Number(promo.buyQuantity)
+        const paga = Number(promo.getQuantity)
+        if (!Number.isInteger(lleva) || lleva < 2) return 'En un combo hay que llevar al menos 2 unidades.'
+        if (!Number.isInteger(paga) || paga < 1) return 'El combo tiene que cobrar al menos 1 unidad.'
+        if (paga >= lleva) return `Un "${lleva}x${paga}" no descuenta nada: hay que pagar menos de lo que se lleva.`
+      }
+      if (promo.type === 'bundle' && promo.requiresCode) {
+        return 'Un combo se aplica solo al llegar a la cantidad; no admite código.'
+      }
       if (promo.requiresCode && !promo.code?.trim()) {
         return 'Un cupón necesita un código para que el cliente lo escriba.'
       }
@@ -156,6 +173,10 @@ export const usePromotionsStore = defineStore('promotions', {
         // excluye a propósito y el RPC solo la usa si el cliente la escribe.
         code: promo.requiresCode && promo.code?.trim() ? promo.code.trim().toUpperCase() : null,
         min_purchase: promo.minPurchase ? Number(promo.minPurchase) : null,
+        // Solo el combo usa estas dos. En el resto van a null para que no
+        // queden restos de un tipo anterior al editar una promoción.
+        buy_quantity: promo.type === 'bundle' ? Number(promo.buyQuantity) : null,
+        get_quantity: promo.type === 'bundle' ? Number(promo.getQuantity) : null,
         starts_at: promo.startsAt || null,
         ends_at: promo.endsAt ? `${promo.endsAt}T23:59:59` : null,
         priority: Number(promo.priority) || 0,
@@ -201,7 +222,51 @@ export const usePromotionsStore = defineStore('promotions', {
       if (error.message?.includes('promotions_type_check')) {
         return 'Ese tipo de promoción no está soportado.'
       }
+      if (error.message?.includes('promotions_bundle_check')) {
+        return 'Un combo necesita llevar al menos 2 unidades y pagar menos de las que lleva.'
+      }
       return `No se pudo guardar la promoción: ${error.message}`
+    },
+
+    /**
+     * Descuento por combo para un carrito, calculado por la BASE.
+     *
+     * La tienda necesita mostrar el 2x1 antes de confirmar, pero el cálculo
+     * no se replica en JavaScript a propósito: hay una sola implementación,
+     * `descuento_combos`, y es la misma que aplica el pedido. Cualquier copia
+     * en el navegador acabaría discrepando —y ya pasó con el costo de envío,
+     * que se mostraba desde una constante mientras el servidor cobraba otra
+     * cosa.
+     *
+     * Devuelve `null` si no aplica ningún combo. Un fallo de red tampoco
+     * rompe el carrito: se muestra sin descuento y el servidor lo aplicará
+     * igualmente al confirmar.
+     */
+    async comboParaCarrito(items) {
+      if (!items?.length) return null
+
+      const { data, error } = await supabase.rpc('descuento_combos', {
+        items_data: items.map((i) => ({
+          product_id: i.productId ?? i.id,
+          variant_id: i.variantId ?? null,
+          quantity: Number(i.quantity)
+        }))
+      })
+
+      if (error) {
+        console.error('No se pudo consultar el combo:', error.message)
+        return null
+      }
+
+      const fila = Array.isArray(data) ? data[0] : data
+      if (!fila || Number(fila.descuento) <= 0) return null
+
+      return {
+        titulo: fila.titulo,
+        etiqueta: fila.etiqueta || '',
+        unidadesGratis: Number(fila.unidades_gratis) || 0,
+        descuento: Number(fila.descuento) || 0
+      }
     },
 
     /** Reemplaza los productos a los que aplica la promoción. */

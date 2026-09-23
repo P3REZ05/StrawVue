@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Pencil, Plus, Power, Tag, Trash2 } from 'lucide-vue-next'
 import { usePromotionsStore, TIPOS, ALCANCES } from '../../stores/promotions'
@@ -19,6 +19,7 @@ const editando = ref(false)
 
 const form = reactive({
   id: null, title: '', label: '', description: '', type: 'percent', value: 10,
+  buyQuantity: 2, getQuantity: 1,
   code: '', requiresCode: false, minPurchase: '', startsAt: '', endsAt: '', priority: 0,
   appliesTo: 'all', categoryId: '', maxUses: '', active: true, productIds: []
 })
@@ -34,6 +35,7 @@ onMounted(async () => {
 const tipoActual = computed(() => TIPOS.find((t) => t.value === form.type))
 const necesitaValor = computed(() => ['percent', 'fixed'].includes(form.type))
 const esCupon = computed(() => form.requiresCode)
+const esCombo = computed(() => form.type === 'bundle')
 
 // Vista previa del efecto sobre un precio de referencia: ver el número final
 // evita el clásico "puse 20 pensando en pesos y era porcentaje".
@@ -45,9 +47,22 @@ const previsualizacion = computed(() => {
   return null
 })
 
+// El combo no tiene un "precio final" que enseñar, porque depende de cuántas
+// unidades lleve la clienta. Se explica con un ejemplo en su lugar.
+const ejemploCombo = computed(() => {
+  const lleva = Number(form.buyQuantity) || 0
+  const paga = Number(form.getQuantity) || 0
+  if (lleva < 2 || paga < 1 || paga >= lleva) return ''
+  const gratis = lleva - paga
+  return `Llevando ${lleva} productos que apliquen, paga ${paga} y ` +
+    `${gratis === 1 ? 'la unidad más barata sale gratis' : `las ${gratis} unidades más baratas salen gratis`}. ` +
+    `Con ${lleva * 2} llevaría ${gratis * 2} gratis.`
+})
+
 function nuevo() {
   Object.assign(form, {
     id: null, title: '', label: '', description: '', type: 'percent', value: 10,
+    buyQuantity: 2, getQuantity: 1,
     code: '', requiresCode: false, minPurchase: '', startsAt: '', endsAt: '', priority: 0,
     appliesTo: 'all', categoryId: '', maxUses: '', active: true, productIds: []
   })
@@ -91,6 +106,7 @@ function resumen(promo) {
   if (promo.type === 'percent') return `${cupon}${promo.value}% de descuento`
   if (promo.type === 'fixed') return `${cupon}${formatCurrency(promo.value)} de descuento`
   if (promo.type === 'shipping') return promo.minPurchase ? `Envío gratis desde ${formatCurrency(promo.minPurchase)}` : 'Envío gratis'
+  if (promo.type === 'bundle') return `Lleva ${promo.buyQuantity}, paga ${promo.getQuantity}`
   return promo.type
 }
 
@@ -148,7 +164,34 @@ function alcance(promo) {
           </span>
         </label>
 
-        <label v-if="form.type !== 'shipping'" class="flex items-start gap-2 text-sm font-bold text-neutral-700">
+        <div v-if="esCombo" class="md:col-span-2 rounded-xl bg-pink-50 p-4">
+          <div class="flex flex-wrap items-end gap-3">
+            <label class="text-sm font-bold text-neutral-700">
+              Lleva
+              <input v-model="form.buyQuantity" type="number" min="2" step="1"
+                     class="mt-1 w-24 rounded-xl border border-pink-100 px-3 py-2.5 font-normal" />
+            </label>
+            <span class="pb-3 text-lg font-bold text-neutral-400">×</span>
+            <label class="text-sm font-bold text-neutral-700">
+              Paga
+              <input v-model="form.getQuantity" type="number" min="1" step="1"
+                     class="mt-1 w-24 rounded-xl border border-pink-100 px-3 py-2.5 font-normal" />
+            </label>
+            <span class="pb-3 text-sm font-bold text-[var(--primary)]">
+              = {{ form.buyQuantity }}x{{ form.getQuantity }}
+            </span>
+          </div>
+          <p v-if="ejemploCombo" class="mt-3 text-sm text-neutral-700">{{ ejemploCombo }}</p>
+          <p v-else class="mt-3 text-sm font-semibold text-red-600">
+            Hay que pagar menos unidades de las que se llevan.
+          </p>
+          <p class="mt-2 text-xs text-neutral-500">
+            El combo cuenta unidades de todo el carrito que entren en su alcance, no del mismo tono.
+            Si la clienta lleva dos labiales distintos, cuentan como dos.
+          </p>
+        </div>
+
+        <label v-if="form.type !== 'shipping' && !esCombo" class="flex items-start gap-2 text-sm font-bold text-neutral-700">
           <input v-model="form.requiresCode" type="checkbox" class="mt-1 size-4 accent-[var(--primary)]" />
           <span>
             Requiere código (cupón)
