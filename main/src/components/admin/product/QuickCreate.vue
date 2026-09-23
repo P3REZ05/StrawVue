@@ -8,7 +8,7 @@ import { Plus, X } from 'lucide-vue-next'
 // "Categorías y atributos", crear la opción y volver a empezar — perdiendo lo
 // que ya se había escrito.
 
-const props = defineProps({
+defineProps({
   etiqueta: { type: String, required: true },
   // Campo extra opcional: 'code' para subtonos, 'hex' para familias de tono.
   campoExtra: { type: String, default: '' }
