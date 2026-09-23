@@ -21,6 +21,11 @@ dice en qué estado está la base.
 | 010 | `010_promociones.sql` | modulo de promociones | no | ☑ 2026-09-03 |
 | 011 | `011_pedido_precio_servidor.sql` | B-18 (precio del cliente) | no | ☑ 2026-09-03 |
 | 012 | `012_reportes.sql` | reportes y margen real | no | ☑ 2026-09-03 |
+| 013 | `013_venta_fisica_atomica.sql` | B-19 (venta de mostrador) | no | ☑ 2026-09-07 |
+| 014 | `014_configuracion_y_banners.sql` | Configuración real + banners | no | ☑ 2026-09-08 |
+| 015 | `015_mensajes_contacto.sql` | Formulario de contacto | no | ☑ 2026-09-08 |
+| 016 | `016_combos_2x1.sql` | Combos 2x1 + ingreso neto | no | ☑ 2026-09-08 |
+| 017 | `017_trazabilidad_producto.sql` | Etapa 6: historia del producto | no | ☑ 2026-09-08 |
 
 Todas aplicadas sobre el proyecto **StrawBack**. Marca la casilla cuando apliques una nueva.
 
@@ -120,6 +125,108 @@ el punto físico en una sola forma, los agregados
 venta cuentan solo pedidos en `paid`, `shipped` o `delivered`: un pedido
 pendiente todavía no es ingreso y uno devuelto dejó de serlo.
 
+**013 — Venta de mostrador atómica.** `create_pos_sale(items, metodo, cliente,
+nota)` más las columnas `sale_number`, `notes` y `subtotal` en `sales`. Hace lo
+mismo que `create_order_with_stock` pero para el punto físico: bloqueo
+`pg_advisory_xact_lock` por producto y tono, stock validado contra
+`available_sale_stock()`, precio unitario de `precio_efectivo()` y escritura de
+`sales` + `sale_items` + `inventory_movements` en una sola transacción.
+
+El precio **no** viaja en el payload, igual que en la 011: si el navegador
+pudiera mandarlo, cualquiera con la consola abierta registraría una venta a $1.
+
+A diferencia del pedido online, esta función **no** se concede a `anon`: se
+hace `revoke ... from public, anon` y solo `authenticated` puede ejecutarla,
+con una comprobación extra de `is_admin()` dentro (necesaria porque
+`security definer` salta RLS).
+
+El mostrador sí puede vender un producto pausado en la tienda —que no se
+exhiba en la web no significa que no esté en la vitrina física— pero no uno
+que ya no existe, ni un tono que no pertenezca a su producto.
+
+**014 — Configuración y banners.** Añade a `store_settings` las claves `socialFacebook`,
+`socialTiktok` y `socialInstagram`, más un trigger de `updated_at` — la
+columna existía desde el principio y nadie la tocaba, así que era imposible
+saber cuándo se cambió el costo de envío.
+
+Crea `home_banners` para el carrusel de la portada, con RLS (lectura pública
+solo de los activos, escritura de admin), índice de orden, trigger de
+`updated_at` y trigger de auditoría. Las políticas van en la **misma**
+migración que la tabla a propósito: una tabla con RLS activo y sin políticas
+devuelve 0 filas sin error, y la portada saldría vacía sin que nada lo dijera.
+
+No toca las políticas de `store_settings`: se comprobó contra la base real
+que un `GET` con solo la apikey anónima devuelve las tres filas y que un
+`UPDATE` con sesión de admin afecta 1 fila.
+
+**015 — Mensajes de contacto.** `contact_messages` con estados
+`new / read / answered / archived`, índice de bandeja, `updated_at` y
+auditoría.
+
+El reparto de permisos es deliberado y va en tres políticas separadas en vez
+de un `for all`: **cualquiera inserta** (es un formulario público, igual que
+el pedido) pero **nadie anónimo lee**. La tabla guarda nombre, correo y
+teléfono de personas reales; una política de lectura pública convertiría el
+formulario en un directorio de datos personales servido por la API. Se
+verificó en la base real: un `GET` anónimo devuelve **401**.
+
+Tampoco hay `delete` para nadie, ni siquiera para el admin: un mensaje se
+archiva. Si alguien pide que se eliminen sus datos, se hace a mano y queda
+constancia.
+
+**016 — Combos 2x1.** `descuento_combos(items)` evalúa por fin
+`buy_quantity` / `get_quantity`, que existían desde la 010 y nunca se usaron.
+
+No cabía en `precio_efectivo` porque esa función responde *cuánto vale UNA
+unidad*, y un 2x1 no tiene respuesta a eso: la segunda vale cero y la tercera
+vuelve a costar. Se calcula sobre el carrito entero.
+
+Reglas, todas decisiones de negocio explícitas: el combo **cruza líneas** (dos
+labiales distintos cuentan como dos), se regalan las unidades **más baratas**,
+solo se aplica **un** combo —el que más descuento deje—, **sí** se suma a un
+cupón, y las unidades se valoran a `precio_efectivo`, no al precio de lista.
+
+El cupón se calcula después del combo, sobre lo que realmente se está pagando.
+Al revés, un 2x1 con un cupón del 20% descontaría dos veces sobre la unidad
+regalada.
+
+Se reescriben `create_order_with_stock` y `create_pos_sale` para aplicarlo. El
+mostrador cobra lo mismo que la web, por decisión del negocio.
+
+**017 — Trazabilidad del producto.** `report_trazabilidad` une los movimientos
+de inventario con la auditoría de la ficha y de los tonos en una sola línea de
+tiempo.
+
+El trabajo de verdad no es unir, es **traducir**. Un `audit_logs` con
+`{"price": 38900, ...}` frente a otro objeto casi igual no es trazabilidad, es
+un volcado. Tres funciones lo convierten en algo legible:
+`etiqueta_columna()` pone nombres en español, `valor_legible()` formatea
+precios al estilo colombiano (`$ 38.900`, con el separador forzado a mano
+porque el locale de la base pondría comas) y traduce booleanos a sí/no, y
+`nombre_referencia()` resuelve las claves foráneas —"Cobertura: → 1" pasa a
+"Cobertura: → Alta"—. `describir_cambio()` las combina y devuelve **NULL**
+cuando no cambió nada relevante, lo que permite descartar los UPDATE que solo
+movieron `updated_at`.
+
+Un detalle de negocio: en un tono, `price` vacío no es "nada", es *hereda del
+producto*. Mostrar "(vacío)" ahí sería mentir por omisión.
+
+**Y destapó un fallo:** cambiar precio o estado escribía **dos** filas de
+auditoría —la del trigger y una `logAudit` a mano en el store—, así que la
+línea de tiempo contaba el mismo cambio dos veces. Va contra la regla que el
+propio `CLAUDE.md` ya documentaba. Se quitaron los `logAudit` redundantes de
+`catalog.setProductStatus`, `catalog.setShadePrice` e
+`inventory.updateSalePrice`, y la vista colapsa el histórico que ya quedó
+duplicado quedándose con la del trigger, que trae el diff completo.
+
+**Y se corrige un fallo anterior:** `report_ventas_linea` calculaba el ingreso
+como `quantity * unit_price`, el bruto. El descuento a nivel de documento no se
+restaba en ninguna parte, así que **un pedido con cupón del 20% ya venía
+inflando el ingreso y el margen** desde la 010. Ahora se reparte
+proporcionalmente entre las líneas —proporcionalmente, porque los agregados por
+producto, tono y categoría suman líneas—. Verificado: la suma del ingreso neto
+de cada pedido cuadra al céntimo con lo cobrado sin envío.
+
 ---
 
 ## Estado en producción tras aplicarlas
@@ -155,3 +262,44 @@ estado real de la base (`schema.sql` → `add_audit_logs.sql` → `atomic_order.
   descontar dos veces;
 - el historial de movimientos queda completo tras una devolución;
 - la auditoría registra los INSERT/UPDATE de todas las tablas cubiertas.
+
+Para la 014 y la 015 (PostgreSQL local, dos pasadas cada una):
+
+- ambas son idempotentes;
+- `home_banners` nace con sus dos políticas, `updated_at` se mueve al
+  actualizar y la auditoría registra INSERT/UPDATE/DELETE;
+- en `contact_messages`, con `set local role` dentro de una transacción:
+  anon **inserta** pero recibe *permission denied* al leer; un usuario
+  autenticado sin perfil admin ve **0 filas**; el admin lee y cambia estados;
+  el `delete` está denegado incluso para el admin; y un estado fuera de la
+  lista lo rechaza el `check`.
+
+Para la 016, quince casos en PostgreSQL local:
+
+- una unidad no descuenta; dos del mismo tono regalan una;
+- con precios distintos se regala **el más barato** ($30.000 + $20.000 → 20.000);
+- tres unidades = un solo grupo completo; cuatro = dos grupos;
+- un 3x2 con seis unidades regala dos;
+- un combo caducado o de otra categoría no aplica;
+- la base rechaza un combo sin cantidades y uno donde se paga más de lo que se lleva;
+- pedido con 2x1: subtotal 50.000, descuento 20.000, total 40.000 + envío;
+- el mismo pedido con cupón del 20%: descuento 26.000 (20.000 del combo + 6.000
+  del cupón sobre los 30.000 restantes), no 30.000;
+- el ingreso neto de cada pedido cuadra con lo cobrado sin envío;
+- la venta de mostrador con combo también cuenta neto en Reportes.
+
+Y sobre la base real: dos bases a $30.320 con el 2x1 activo → una gratis,
+$30.320 a pagar.
+
+Para la 013, además:
+
+- un usuario sin perfil de admin es rechazado (`Solo un administrador…`);
+- sobreventa, cantidad cero, producto inexistente y tono que no pertenece al
+  producto: los cuatro rechazados con su mensaje propio;
+- 10 cajas simultáneas por la última unidad → 1 aceptada, 9 rechazadas, stock
+  final exactamente 0 y nunca negativo;
+- con `unit_price: 1` en el payload, la venta se registró igualmente a
+  $38.900: el precio lo pone el servidor;
+- tras las 9 transacciones abortadas, cero cabeceras sin líneas, cero ventas
+  sin movimiento de inventario y el total de cada venta cuadra con la suma de
+  sus líneas.
