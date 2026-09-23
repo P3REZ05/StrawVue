@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "smoke": "node scripts/smoke.mjs",
+    "verify": "npm run lint && npm run build && npm run smoke && npm run responsive",
+    "responsive": "node scripts/responsive.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
@@ -18,6 +23,10 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.0",
     "@vitejs/plugin-vue": "^5.2.1",
+    "eslint": "^9.39.5",
+    "eslint-plugin-vue": "^10.11.0",
+    "globals": "^17.12.0",
+    "playwright": "^1.63.0",
     "tailwindcss": "^4.1.0",
     "vite": "^6.1.0"
   }
