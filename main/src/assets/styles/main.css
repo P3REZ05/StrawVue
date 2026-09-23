@@ -5,11 +5,61 @@
   box-sizing: border-box;
 }
 
+/*
+ * El rebote vertical (overscroll bounce).
+ *
+ * Al empujar el scroll más allá del final, el navegador separa la página y
+ * deja ver el fondo del documento. Como `body` era blanco y el pie es negro,
+ * aparecía una franja blanca encima o debajo, como si algo estuviera mal
+ * pintado. Cabecera y pie tienen colores distintos, así que ningún fondo
+ * único los contenta a los dos: lo que se quita es el rebote.
+ *
+ * `overscroll-behavior-y: none` también evita que el scroll se "encadene" al
+ * documento cuando se llega al final de un modal o del carrito.
+ */
+html {
+  overscroll-behavior-y: none;
+  background-color: var(--secondary);
+}
+
 body {
   margin: 0;
   font-family: var(--font-primary);
   color: var(--dark);
   background-color: var(--secondary);
+  overscroll-behavior-y: none;
+}
+
+/*
+ * El pie, pegado abajo también en las páginas cortas.
+ *
+ * Sin esto, `#app` mide lo que midan sus hijos: en una página con poco
+ * contenido —favoritos con un producto, términos, un resultado de búsqueda
+ * vacío— el pie negro quedaba a media pantalla y debajo se veía una franja
+ * blanca hasta el final de la ventana. Parecía que la página estaba rota.
+ *
+ * La columna ocupa como mínimo el alto de la ventana y el bloque de en medio
+ * —el que contiene la vista— se estira con `flex-1`, así que el pie cae al
+ * fondo cuando sobra sitio y se va hacia abajo cuando falta. Es layout de la
+ * aplicación entera, no de una página: por eso vive aquí y no en cada vista.
+ *
+ * `100dvh` en vez de `100vh` por el móvil: `vh` cuenta la ventana con la barra
+ * del navegador escondida, así que en cuanto aparece sobra un trozo de página
+ * y vuelve a verse el hueco. `dvh` mide lo que de verdad se ve.
+ */
+#app {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  flex-direction: column;
+}
+
+/* Los precios y las cantidades, con cifras de ancho fijo: si los dígitos
+   bailan de ancho, una columna de precios queda desalineada y cuesta
+   comparar. */
+.tabular,
+[data-precio] {
+  font-variant-numeric: tabular-nums;
 }
 
 button,

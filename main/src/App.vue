@@ -66,7 +66,13 @@ onMounted(async () => {
 
   <template v-else>
     <Header />
-    <RouterView />
+    <!-- Este `div` es el que empuja el pie al fondo (ver `#app` en main.css).
+         Es un `div` y no un `main` a propósito: varias vistas ya traen su
+         propio `<main>` como raíz, y dos `<main>` en la misma página es HTML
+         inválido y confunde a los lectores de pantalla. -->
+    <div class="flex-1">
+      <RouterView />
+    </div>
     <Footer v-if="!isAdminRoute" />
     <CartDrawer />
   </template>
