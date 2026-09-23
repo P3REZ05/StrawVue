@@ -1,0 +1,68 @@
+# Lo que esta rutina impide que llegue a producción.
+#
+# El proyecto no tiene tests unitarios todavía, así que esto no demuestra que
+# la tienda calcule bien. Demuestra tres cosas más modestas y que ya han
+# fallado de verdad aquí:
+#
+#   1. que el código compila             → `npm run build`
+#   2. que ninguna página sale en blanco → `npm run smoke`
+#   3. que no hay variables muertas ni   → `npm run lint`
+#      `confirm()` colados
+#
+# El punto 2 es el que justifica el gasto: un import circular o un componente
+# que revienta al montar compilan perfectamente y solo se ven al abrir la
+# página. La prueba de humo sirve el `dist/` real, visita nueve rutas,
+# intercepta las llamadas a Supabase (por eso no hacen falta credenciales) y
+# además comprueba que el panel de administración NO se descarga en rutas
+# públicas.
+
+name: Verificar
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: main
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: main/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      # Playwright necesita el navegador aparte. Solo chromium: la prueba de
+      # humo comprueba que la página renderiza, no compatibilidad entre motores.
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Prueba de humo
+        run: npm run smoke
+
+      # Si algo falla, el `dist/` ayuda a reproducirlo sin adivinar.
+      - name: Guardar el build cuando algo falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-fallido
+          path: main/dist
+          retention-days: 5

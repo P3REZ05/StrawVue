@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Strawberry Makeup · Cómo llega un producto hasta la venta</title>
+<style>
+  :root{
+    --tinta:#141117; --tinta2:#5b5560; --tinta3:#8a838f;
+    --rosa:#c2185b; --rosaSuave:#fce4ec; --borde:#ecdfe6;
+    --ok:#00695c; --okBg:#e0f2f1;
+    --alerta:#8a5300; --alertaBg:#fff4e0;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:32px 20px 56px; background:#fff; color:var(--tinta);
+    font:400 16px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1040px;margin:0 auto}
+  .eyebrow{font:700 12px/1 ui-sans-serif,system-ui;letter-spacing:.22em;text-transform:uppercase;color:var(--rosa);margin:0}
+  h1{font-size:clamp(26px,4vw,38px);line-height:1.15;letter-spacing:-.02em;margin:10px 0 8px;font-weight:800}
+  .sub{color:var(--tinta2);margin:0 0 36px;max-width:62ch}
+  h2{font-size:19px;font-weight:800;letter-spacing:-.01em;margin:44px 0 6px}
+  h2 + .note{color:var(--tinta2);margin:0 0 18px;font-size:15px;max-width:64ch}
+
+  /* ---- Los cuatro pasos ---- */
+  .pasos{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+  .paso{border:1px solid var(--borde);border-radius:16px;padding:18px 16px 16px;position:relative;background:#fff}
+  .paso .n{display:grid;place-items:center;width:26px;height:26px;border-radius:999px;
+    background:var(--rosaSuave);color:var(--rosa);font:800 13px/1 ui-sans-serif,system-ui;margin-bottom:10px}
+  .paso h3{margin:0 0 4px;font-size:16px;font-weight:800}
+  .paso .que{margin:0 0 12px;font-size:14px;color:var(--tinta2);line-height:1.5}
+  .donde{border-top:1px dashed var(--borde);padding-top:10px;font-size:13px;line-height:1.5}
+  .donde b{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--tinta3);font-weight:700;margin-bottom:3px}
+  .ruta{color:var(--tinta);font-weight:600}
+  .ruta span{color:var(--tinta3);font-weight:400;padding:0 3px}
+
+  .flecha{display:flex;align-items:center;justify-content:center;color:var(--tinta3);font-size:20px}
+  @media(max-width:900px){.flecha{display:none}}
+
+  /* ---- Regla de oro ---- */
+  .regla{margin-top:22px;border-radius:16px;background:var(--okBg);padding:16px 18px;font-size:15px;line-height:1.6;color:var(--ok)}
+  .regla b{font-weight:800}
+
+  /* ---- Lo confuso ---- */
+  .lios{display:grid;gap:12px;margin-top:6px}
+  .lio{border:1px solid var(--borde);border-left:4px solid #e8a33d;border-radius:12px;padding:14px 16px;background:#fff}
+  .lio h3{margin:0 0 5px;font-size:15px;font-weight:800}
+  .lio p{margin:0;font-size:14.5px;color:var(--tinta2);line-height:1.55}
+  .lio p + p{margin-top:7px}
+  code{background:#f5f1f3;border-radius:5px;padding:1px 6px;font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--tinta)}
+
+  /* ---- Tabla dónde está cada cosa ---- */
+  table{width:100%;border-collapse:collapse;margin-top:6px;font-size:14.5px}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--borde);vertical-align:top}
+  th{font:700 11px/1 ui-sans-serif,system-ui;letter-spacing:.1em;text-transform:uppercase;color:var(--tinta3);white-space:nowrap}
+  td:first-child{font-weight:700;white-space:nowrap}
+  td:last-child{color:var(--tinta2)}
+  .tag{display:inline-block;border-radius:999px;padding:2px 9px;font:700 11.5px/1.5 ui-sans-serif,system-ui}
+  .tag.ok{background:var(--okBg);color:var(--ok)}
+  .tag.mal{background:var(--alertaBg);color:var(--alerta)}
+  footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--borde);color:var(--tinta3);font-size:13.5px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="eyebrow">Strawberry Makeup</p>
+  <h1>Cómo llega un producto hasta la venta</h1>
+  <p class="sub">
+    Cuatro pasos. El producto se crea vacío y va ganando existencias por el camino:
+    nunca se le “escribe” un stock a mano.
+  </p>
+
+  <div class="pasos">
+    <div class="paso">
+      <div class="n">1</div>
+      <h3>Crear la ficha</h3>
+      <p class="que">Nombre, marca, categoría, precio, tonos y fotos. Nace como <b>borrador</b>: nadie lo ve todavía. <b>Stock: 0.</b></p>
+      <div class="donde"><b>En el panel</b>
+        <span class="ruta">Productos <span>›</span> Nuevo producto</span>
+      </div>
+    </div>
+
+    <div class="paso">
+      <div class="n">2</div>
+      <h3>Comprarle al proveedor</h3>
+      <p class="que">Registras cuántas unidades trajiste y a qué costo. La mercancía entra a <b>bodega</b>.</p>
+      <div class="donde"><b>En el panel</b>
+        <span class="ruta">Inventario <span>›</span> Compras</span>
+      </div>
+    </div>
+
+    <div class="paso">
+      <div class="n">3</div>
+      <h3>Sacarlo a la vitrina</h3>
+      <p class="que">Pasas de bodega a venta las unidades que quieras. Puede ser parcial: compras 100, sacas 20.</p>
+      <div class="donde"><b>En el panel</b>
+        <span class="ruta">Inventario <span>›</span> Inventario de Venta <span>›</span> Transferir</span>
+      </div>
+    </div>
+
+    <div class="paso">
+      <div class="n">4</div>
+      <h3>Venderlo</h3>
+      <p class="que">Por la web o en el mostrador. El stock baja solo, por tono, y el servidor pone el precio.</p>
+      <div class="donde"><b>En el panel</b>
+        <span class="ruta">Pedidos</span> · <span class="ruta">Ventas</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="regla">
+    <b>La regla que explica todo lo demás:</b> el stock no es un campo que alguien escriba.
+    Es la suma del historial de movimientos (compra, transferencia, venta, devolución).
+    Por eso un producto recién creado está en cero aunque tengas la caja en la mano:
+    <b>a la base todavía no le has contado que la compraste.</b>
+  </div>
+
+  <h2>Por qué se siente raro</h2>
+  <p class="note">Tres cosas de la interfaz, no del flujo. El flujo está bien; lo que confunde es cómo está nombrado y repartido.</p>
+
+  <div class="lios">
+    <div class="lio">
+      <h3>Hay dos puertas para crear un producto, y una está rota</h3>
+      <p>
+        <span class="ruta">Productos <span>›</span> Nuevo producto</span> abre el editor completo.
+        Pero <span class="ruta">Inventario <span>›</span> Inventario de Compras <span>›</span> Nuevo Producto</span>
+        abre una ventanita con solo <b>nombre, categoría y descripción</b>.
+      </p>
+      <p>
+        Los dos escriben en la misma tabla. Si creas por la segunda, el producto nace
+        <b>sin precio, sin marca, sin tonos y sin fotos</b>, y toca ir a arreglarlo a la otra pantalla.
+        Ese es el camino que más desconcierta.
+      </p>
+    </div>
+
+    <div class="lio">
+      <h3>“Inventario de Compras” no es un inventario de compras</h3>
+      <p>
+        El nombre promete “lo que he comprado”. En realidad es <b>la lista completa del catálogo</b>
+        —exactamente la misma que muestra <span class="ruta">Productos</span>— con dos columnas de stock al final.
+      </p>
+      <p>Lo que compraste está en la pestaña <b>Compras</b>, y las unidades en la columna <b>Stock Bodega</b>.</p>
+    </div>
+
+    <div class="lio">
+      <h3>Las pestañas van al revés del flujo</h3>
+      <p>
+        Entras a <span class="ruta">Inventario</span> y lo primero que aparece es el catálogo.
+        El orden natural sería el del recorrido: primero lo que compras, después lo que tienes guardado,
+        y al final lo que está a la venta.
+      </p>
+      <p>Además <b>la bodega no tiene pantalla propia</b>: vive escondida como una columna dentro de “Inventario de Venta”.</p>
+    </div>
+  </div>
+
+  <h2>Dónde está cada cosa hoy</h2>
+  <table>
+    <thead>
+      <tr><th>Pantalla</th><th>Qué hace en realidad</th><th>¿Se entiende?</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Productos</td>
+        <td>El catálogo, con el editor completo. Es la puerta buena para crear.</td>
+        <td><span class="tag ok">Sí</span></td>
+      </tr>
+      <tr>
+        <td>Inventario › Inventario de Compras</td>
+        <td>El mismo catálogo otra vez, con un creador recortado.</td>
+        <td><span class="tag mal">Sobra</span></td>
+      </tr>
+      <tr>
+        <td>Inventario › Compras</td>
+        <td>Órdenes al proveedor. Aquí entra la mercancía a bodega.</td>
+        <td><span class="tag ok">Sí</span></td>
+      </tr>
+      <tr>
+        <td>Inventario › Inventario de Venta</td>
+        <td>Lo que está a la venta, más la bodega y el botón de transferir.</td>
+        <td><span class="tag mal">Mezcla dos cosas</span></td>
+      </tr>
+      <tr>
+        <td>Movimientos</td>
+        <td>El historial completo. Es la fuente de verdad del stock.</td>
+        <td><span class="tag ok">Sí</span></td>
+      </tr>
+      <tr>
+        <td>Ventas</td>
+        <td>Mostrador: cobras y el stock baja.</td>
+        <td><span class="tag ok">Sí</span></td>
+      </tr>
+      <tr>
+        <td>Pedidos</td>
+        <td>Lo que se compró por la web: pago, envío, entrega, devolución.</td>
+        <td><span class="tag ok">Sí</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <footer>
+    Mientras tanto, el camino que sí funciona de punta a punta:
+    <b>Productos › Nuevo producto</b> → <b>Inventario › Compras</b> → <b>Inventario › Inventario de Venta › Transferir</b>.
+    Ignora “Inventario de Compras” para crear.
+  </footer>
+
+</div>
+</body>
+</html>

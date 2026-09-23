@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Strawberry Makeup — estado del proyecto</title>
+<style>
+  :root {
+    --surface: #fcfcfb;
+    --card: #ffffff;
+    --ink: #1c1b19;
+    --ink-2: #44423e;
+    --muted: #6f6c66;
+    --grid: #e7e5e0;
+    --s1: #2a78d6;
+    --s2: #1baf7a;
+    --s3: #d9822b;
+    --track: #eceae5;
+    --pink: #ec4899;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: #16151a; --card: #1e1d23; --ink: #f2f1ee; --ink-2: #cfcdc7;
+      --muted: #9c9992; --grid: #34323a; --track: #2c2a32;
+      --s1: #5fa2ee; --s2: #35c894; --s3: #eb9b4d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 20px 64px;
+    background: var(--surface); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  header { margin-bottom: 28px; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--pink); margin: 0 0 6px; }
+  h1 { font-size: 26px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0; }
+
+  .hero {
+    background: var(--card); border-radius: 18px; padding: 28px 26px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.05); margin-bottom: 20px;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 22px;
+  }
+  .hero .n { font-size: 62px; font-weight: 800; letter-spacing: -.035em; line-height: 1; color: var(--s1); }
+  .hero .lbl { font-size: 15px; color: var(--ink-2); max-width: 430px; }
+  .hero .lbl strong { color: var(--ink); }
+
+  h2 { font-size: 15px; margin: 30px 0 4px; letter-spacing: -.005em; }
+  .note { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+
+  .card { background: var(--card); border-radius: 18px; padding: 22px 24px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+
+  .bar-row { display: grid; grid-template-columns: 1fr; gap: 5px; padding: 13px 0; border-bottom: 1px solid var(--grid); }
+  .bar-row:last-child { border-bottom: 0; }
+  .bar-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .bar-name { font-weight: 700; font-size: 14px; }
+  .bar-val { font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .track { height: 10px; border-radius: 5px; background: var(--track); overflow: hidden; }
+  .fill { height: 100%; border-radius: 5px; }
+  .bar-note { font-size: 12.5px; color: var(--muted); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); padding: 0 10px 9px 0; font-weight: 700; border-bottom: 1px solid var(--grid); }
+  td { padding: 10px 10px 10px 0; border-bottom: 1px solid var(--grid); vertical-align: top; color: var(--ink-2); }
+  tr:last-child td { border-bottom: 0; }
+  td.num { font-variant-numeric: tabular-nums; color: var(--muted); width: 26px; font-weight: 700; }
+  td.what { color: var(--ink); font-weight: 600; width: 32%; }
+  code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--track); padding: 1px 5px; border-radius: 4px; }
+
+  .tag { display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+  .t-tuyo { background: rgba(217,130,43,.16); color: var(--s3); }
+  .t-plata { background: rgba(236,72,153,.14); color: var(--pink); }
+  .t-deuda { background: rgba(42,120,214,.13); color: var(--s1); }
+  .t-ok    { background: rgba(27,175,122,.15); color: var(--s2); }
+
+  ul.done { list-style: none; padding: 0; margin: 0; }
+  ul.done li { padding: 9px 0 9px 26px; border-bottom: 1px solid var(--grid); position: relative; font-size: 13.5px; color: var(--ink-2); }
+  ul.done li:last-child { border-bottom: 0; }
+  ul.done li::before { content: "✓"; position: absolute; left: 0; top: 9px; color: var(--s2); font-weight: 800; }
+  ul.done li strong { color: var(--ink); }
+
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 14px; }
+  .fact .n { font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+  .fact .l { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+
+  footer { margin-top: 30px; font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Strawberry Makeup</p>
+    <h1>Estado del proyecto</h1>
+    <p class="sub">9 de septiembre de 2026 · medido sobre el código, no estimado de memoria</p>
+  </header>
+
+  <div class="hero">
+    <span class="n">93%</span>
+    <span class="lbl">
+      de 44 capacidades concretas, <strong>41 están hechas y verificadas</strong>.
+      El denominador bajó de 45 a 44 porque los roles dejaron de ser una tarea
+      pendiente: decidiste que no se construyen. Lo que queda son tus fotos, la
+      versión móvil y los tests de lógica.
+    </span>
+  </div>
+
+  <h2>Por carril</h2>
+  <p class="note">Avanzan a ritmos distintos, así que un solo número esconde lo importante. El porcentaje va escrito en cada barra.</p>
+  <div class="card">
+
+    <div class="bar-row">
+      <div class="bar-head"><span class="bar-name">Operar el negocio</span><span class="bar-val" style="color:var(--s1)">94%</span></div>
+      <div class="track"><div class="fill" style="width:94%;background:var(--s1)"></div></div>
+      <div class="bar-note">17 de 18 · Productos, tonos, compras, bodega, pedidos, promociones, combos, reportes, mostrador, mensajes, trazabilidad y configuración real. Falta: la versión móvil.</div>
+    </div>
+
+    <div class="bar-row">
+      <div class="bar-head"><span class="bar-name">Vender online</span><span class="bar-val" style="color:var(--s1)">90%</span></div>
+      <div class="track"><div class="fill" style="width:90%;background:var(--s1)"></div></div>
+      <div class="bar-note">9 de 10 · El flujo de compra completo funciona, el envío se configura desde el panel y el formulario de contacto llega a una bandeja. Falta: tus fotos.</div>
+    </div>
+
+    <div class="bar-row">
+      <div class="bar-head"><span class="bar-name">Integridad y seguridad</span><span class="bar-val" style="color:var(--s1)">100%</span></div>
+      <div class="track"><div class="fill" style="width:100%;background:var(--s1)"></div></div>
+      <div class="bar-note">8 de 8 · RLS, auditoría, stock derivado, precio del servidor y atomicidad en los dos canales, e ingreso neto en reportes. Los roles salieron de la cuenta: decidiste que con un solo administrador no hacen falta.</div>
+    </div>
+
+    <div class="bar-row">
+      <div class="bar-head"><span class="bar-name">Mantenible a futuro</span><span class="bar-val" style="color:var(--s1)">88%</span></div>
+      <div class="track"><div class="fill" style="width:88%;background:var(--s1)"></div></div>
+      <div class="bar-note">7 de 8 · Convenciones, migraciones, bitácora, code-splitting, prueba de humo, y ahora linter en cero errores y CI que lo corre en cada push. Falta: tests de la lógica de negocio.</div>
+    </div>
+
+  </div>
+
+  <h2>Qué falta, por lo que más duele</h2>
+  <p class="note">Ordenado por consecuencia real, no por esfuerzo.</p>
+  <div class="card">
+    <table>
+      <thead>
+        <tr><th class="num">#</th><th>Qué</th><th>Por qué importa</th><th>Tipo</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="num">1</td><td class="what">Fotos reales de producto</td><td>El catálogo sigue sin una sola imagen. Toda la infraestructura existe: bucket, optimizador y subida por arrastre. Sin fotos no se vende.</td><td><span class="tag t-tuyo">Tuyo</span></td></tr>
+        <tr><td class="num">2</td><td class="what">Borrar código muerto</td><td><code>AdminVariants</code>, <code>AdminFilter</code>, <code>AdminAddFilter</code> y <code>mockData.js</code>: nadie los importa. Claude no puede borrar archivos de tu disco.</td><td><span class="tag t-tuyo">Tuyo</span></td></tr>
+        <tr><td class="num">3</td><td class="what">Aplicar la migración 018</td><td>Suelta dos columnas fantasma. Está probada entera en un Postgres local, pero el panel de Supabase no cargaba. No bloquea nada: el código ya dejó de leerlas.</td><td><span class="tag t-tuyo">Tuyo</span></td></tr>
+        <tr><td class="num">4</td><td class="what">Copiar el workflow de CI</td><td><code>.github/workflows/verificar.yml</code> te llegó en el chat. Esa carpeta está protegida y Claude no puede escribir en ella.</td><td><span class="tag t-tuyo">Tuyo</span></td></tr>
+        <tr><td class="num">5</td><td class="what">Panel usable en el móvil</td><td>Aplazado por decisión tuya. Sigue en pie: tablas de diez columnas, y el panel se va a administrar desde el teléfono.</td><td><span class="tag t-deuda">Producto</span></td></tr>
+        <tr><td class="num">6</td><td class="what">Ampliar las pruebas</td><td><code>npm run smoke</code> cubre que ninguna pantalla quede en blanco. Falta probar la lógica: precios heredados, envío, combos, estados de pedido.</td><td><span class="tag t-deuda">Deuda</span></td></tr>
+        <tr><td class="num">7</td><td class="what">Precio de "Brochas Ani-k"</td><td>Guardado como <code>40</code>, no <code>40.000</code>. Dato, no código: se corrige desde el editor.</td><td><span class="tag t-tuyo">Tuyo</span></td></tr>
+        <tr><td class="num">8</td><td class="what">Borrar la carpeta <code>StrawBerry\supabase\</code></td><td>Quedó suelta de un error mío en una sesión anterior. La buena es <code>StrawBerry\main\supabase\</code>.</td><td><span class="tag t-tuyo">Tuyo</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Cerrado en las últimas dos sesiones</h2>
+  <div class="card">
+    <ul class="done">
+      <li><strong>La venta de mostrador podía perderse en silencio.</strong> No esperaba al servidor y se tragaba los errores. Ahora es atómica y maneja tonos: 10 cajas simultáneas por la última unidad dan 1 aceptada y 9 rechazadas.</li>
+      <li><strong>Los reportes inflaban el ingreso.</strong> Sumaban el bruto de cada línea y nunca restaban el descuento del cupón — venía mal desde marzo. Ahora el ingreso neto cuadra al céntimo con lo cobrado.</li>
+      <li><strong>Los banners de la portada solo los veía quien los creaba.</strong> Vivían en <code>localStorage</code>, con las imágenes en base64 dentro.</li>
+      <li><strong>El envío tenía dos fuentes.</strong> El carrito mostraba una constante; el servidor cobraba lo de la base. Cambiarlo hacía que se enseñara un precio y se cobrara otro.</li>
+      <li><strong>El formulario de contacto no guardaba nada.</strong> Era literalmente <code>sent.value = true</code>.</li>
+      <li><strong>Compras cerraba el modal aunque el guardado fallara.</strong> El mismo patrón que hacía perder ventas en el mostrador.</li>
+      <li><strong>Editar el precio de un tono movía el de todos.</strong> Cinco de seis tonos heredan ese precio.</li>
+      <li><strong>Combos 2x1</strong>, con el descuento visible en el carrito antes de confirmar y verificado contra lo que cobra el servidor.</li>
+      <li><strong>Trazabilidad del producto</strong>: los <code>jsonb</code> de auditoría traducidos a frases legibles, con las claves foráneas resueltas a nombres.</li>
+      <li><strong>El panel dejó de viajar a la tienda.</strong> La carga inicial bajó de 182 KB a 127 KB comprimidos.</li>
+      <li><strong>Primera prueba automática</strong>: <code>npm run smoke</code> recorre 9 rutas sobre el build real.</li>
+      <li><strong>Base limpia de datos de prueba</strong>, con respaldo dentro de la propia base.</li>
+      <li><strong>La portada dejó de mentir.</strong> Las 15 categorías estaban escritas a mano en el componente: crear una en el panel no hacía nada, y el botón "Comprar ahora" no llevaba a ninguna parte. Ahora salen del catálogo y cada tarjeta filtra la tienda.</li>
+      <li><strong>Linter y CI.</strong> ESLint en cero errores, configurado para atrapar errores reales y no para discutir de comillas, y un workflow que corre <code>lint</code> + <code>build</code> + <code>smoke</code> en cada push.</li>
+    </ul>
+  </div>
+
+  <h2>El proyecto en números</h2>
+  <div class="card facts">
+    <div class="fact"><div class="n">10.078</div><div class="l">líneas en <code>src/</code></div></div>
+    <div class="fact"><div class="n">46</div><div class="l">componentes Vue</div></div>
+    <div class="fact"><div class="n">17</div><div class="l">migraciones aplicadas <span style="opacity:.6">(+1 lista)</span></div></div>
+    <div class="fact"><div class="n">22</div><div class="l">funciones en Postgres</div></div>
+    <div class="fact"><div class="n">10</div><div class="l">vistas de negocio</div></div>
+    <div class="fact"><div class="n">9</div><div class="l">rutas con prueba de humo</div></div>
+  </div>
+
+  <footer>
+    El porcentaje sale de contar 44 capacidades concretas y ponderar los cuatro carriles
+    (operar 30%, vender 30%, integridad 25%, mantenible 15%). Mismos criterios que las
+    mediciones del 7 y el 8 de septiembre, salvo que los roles salieron del conteo al
+    decidirse que no se construyen — por eso el denominador baja de 45 a 44. El detalle
+    vive en <code>HANDOFF.md</code>, sección 2c.
+  </footer>
+
+</div>
+</body>
+</html>
