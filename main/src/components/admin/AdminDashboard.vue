@@ -69,7 +69,7 @@ const recentOrders = computed(() => {
 
 onMounted(async () => {
   try {
-    await Promise.all([inventoryStore.init(), ordersStore.init()])
+    await Promise.all([inventoryStore.initPanel(), ordersStore.init()])
   } catch {
     // El error ya se muestra en AdminPanel.
   }

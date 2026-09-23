@@ -1,14 +1,14 @@
-<script setup>
+﻿<script setup>
 import { computed, reactive, ref } from 'vue'
-import { useInventoryStore } from '../../../stores/inventory'
+import { useSuppliersStore } from '../../../stores/suppliers'
 
-const store = useInventoryStore()
+const store = useSuppliersStore()
 const showForm = ref(false)
 const editingId = ref(null)
 const selectedSupplier = ref(null)
 const error = ref('')
 const form = reactive({ name: '', documentNumber: '', contactName: '', phone: '', email: '', city: '', address: '', paymentTerms: '', notes: '' })
-const suppliers = computed(() => store.suppliers.filter((supplier) => supplier.active !== false))
+const suppliers = computed(() => store.activos)
 
 function resetForm() {
   Object.assign(form, { name: '', documentNumber: '', contactName: '', phone: '', email: '', city: '', address: '', paymentTerms: '', notes: '' })
@@ -49,10 +49,22 @@ async function submit() {
   }
 }
 
-async function deactivate(supplier) {
-  if (!window.confirm(`¿Desactivar a ${supplier.name}?`)) return
+// Mismo criterio que en el resto del panel: confirmar dentro de la aplicación
+// y no con el diálogo del navegador, que bloquea la pestaña y no explica qué
+// implica desactivar.
+const porDesactivar = ref(null)
+
+function pedirDesactivar(supplier) {
+  error.value = ''
+  porDesactivar.value = supplier
+}
+
+async function deactivate() {
+  const proveedor = porDesactivar.value
+  porDesactivar.value = null
+  if (!proveedor) return
   try {
-    await store.deactivateSupplier(supplier.id)
+    await store.deactivateSupplier(proveedor.id)
   } catch (submitError) {
     error.value = submitError.message || 'No se pudo desactivar el proveedor.'
   }
@@ -65,7 +77,24 @@ async function deactivate(supplier) {
 
     <form v-if="showForm" class="rounded-2xl bg-white p-5 shadow-sm" @submit.prevent="submit"><div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3"><label class="text-sm font-bold text-neutral-700">Nombre<input v-model="form.name" required class="mt-1 w-full rounded-xl border border-pink-100 px-3 py-2.5 font-normal" /></label><label class="text-sm font-bold text-neutral-700">NIT / documento<input v-model="form.documentNumber" class="mt-1 w-full rounded-xl border border-pink-100 px-3 py-2.5 font-normal" /></label><label class="text-sm font-bold text-neutral-700">Contacto<input v-model="form.contactName" class="mt-1 w-full rounded-xl border border-pink-100 px-3 py-2.5 font-normal" /></label><label class="text-sm font-bold text-neutral-700">Teléfono<input v-model="form.phone" class="mt-1 w-full rounded-xl border border-pink-100 px-3 py-2.5 font-normal" /></label><label class="text-sm font-bold text-neutral-700">Correo<input v-model="form.email" type="email" class="mt-1 w-full rounded-xl border border-pink-100 px-3 py-2.5 font-normal" /></label><label class="text-sm font-bold text-neutral-700">Ciudad<input v-model="form.city" class="mt-1 w-full rounded-xl border border-pink-100 px-3 py-2.5 font-normal" /></label><label class="text-sm font-bold text-neutral-700">Dirección<input v-model="form.address" class="mt-1 w-full rounded-xl border border-pink-100 px-3 py-2.5 font-normal" /></label><label class="text-sm font-bold text-neutral-700">Condiciones de pago<input v-model="form.paymentTerms" class="mt-1 w-full rounded-xl border border-pink-100 px-3 py-2.5 font-normal" /></label><label class="text-sm font-bold text-neutral-700 lg:col-span-3">Notas<textarea v-model="form.notes" rows="2" class="mt-1 w-full rounded-xl border border-pink-100 px-3 py-2.5 font-normal"></textarea></label></div><p v-if="error" class="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-600">{{ error }}</p><div class="mt-5 flex gap-2"><button type="submit" class="rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-white">{{ editingId ? 'Guardar cambios' : 'Crear proveedor' }}</button><button type="button" class="rounded-xl border border-pink-200 px-5 py-2.5 text-sm font-bold" @click="showForm = false; resetForm()">Cancelar</button></div></form>
 
-    <div class="overflow-x-auto rounded-2xl bg-white shadow-sm"><table class="w-full min-w-200 text-sm"><thead><tr class="border-b border-pink-100 text-left text-xs font-bold uppercase tracking-wider text-neutral-500"><th class="px-5 py-4">Proveedor</th><th class="px-5 py-4">Documento</th><th class="px-5 py-4">Contacto</th><th class="px-5 py-4">Teléfono</th><th class="px-5 py-4">Ciudad</th><th class="px-5 py-4">Acciones</th></tr></thead><tbody><tr v-for="supplier in suppliers" :key="supplier.id" class="cursor-pointer border-b border-pink-50 transition hover:bg-pink-50/60" tabindex="0" @click="openDetails(supplier)" @keydown.enter="openDetails(supplier)"><td class="px-5 py-4 font-bold">{{ supplier.name }}</td><td class="px-5 py-4">{{ supplier.document_number || '—' }}</td><td class="px-5 py-4">{{ supplier.contact_name || '—' }}</td><td class="px-5 py-4">{{ supplier.phone || '—' }}</td><td class="px-5 py-4">{{ supplier.city || '—' }}</td><td class="px-5 py-4"><div class="flex gap-2"><button class="rounded-lg border border-pink-200 px-3 py-1.5 text-xs font-bold text-[var(--primary)]" @click.stop="openEdit(supplier)">Editar</button><button class="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-bold text-red-500" @click.stop="deactivate(supplier)">Desactivar</button></div></td></tr></tbody></table><p v-if="!suppliers.length" class="p-10 text-center text-neutral-500">No hay proveedores activos registrados.</p></div>
+    <div class="overflow-x-auto rounded-2xl bg-white shadow-sm"><table class="w-full min-w-200 text-sm"><thead><tr class="border-b border-pink-100 text-left text-xs font-bold uppercase tracking-wider text-neutral-500"><th class="px-5 py-4">Proveedor</th><th class="px-5 py-4">Documento</th><th class="px-5 py-4">Contacto</th><th class="px-5 py-4">Teléfono</th><th class="px-5 py-4">Ciudad</th><th class="px-5 py-4">Acciones</th></tr></thead><tbody><tr v-for="supplier in suppliers" :key="supplier.id" class="cursor-pointer border-b border-pink-50 transition hover:bg-pink-50/60" tabindex="0" @click="openDetails(supplier)" @keydown.enter="openDetails(supplier)"><td class="px-5 py-4 font-bold">{{ supplier.name }}</td><td class="px-5 py-4">{{ supplier.document_number || '—' }}</td><td class="px-5 py-4">{{ supplier.contact_name || '—' }}</td><td class="px-5 py-4">{{ supplier.phone || '—' }}</td><td class="px-5 py-4">{{ supplier.city || '—' }}</td><td class="px-5 py-4"><div class="flex gap-2"><button class="rounded-lg border border-pink-200 px-3 py-1.5 text-xs font-bold text-[var(--primary)]" @click.stop="openEdit(supplier)">Editar</button><button class="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-bold text-red-500" @click.stop="pedirDesactivar(supplier)">Desactivar</button></div></td></tr></tbody></table><p v-if="!suppliers.length" class="p-10 text-center text-neutral-500">No hay proveedores activos registrados.</p></div>
+
+    <div
+      v-if="porDesactivar"
+      class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+      @click.self="porDesactivar = null"
+    >
+      <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <h3 class="text-lg font-bold text-black">¿Desactivar a {{ porDesactivar.name }}?</h3>
+        <p class="mt-2 text-sm text-neutral-600">
+          Dejará de aparecer al registrar compras. Sus órdenes y movimientos anteriores se conservan.
+        </p>
+        <div class="mt-6 flex justify-end gap-3">
+          <button class="rounded-full bg-neutral-200 px-5 py-2.5 text-sm font-bold text-neutral-700 transition hover:bg-neutral-300" @click="porDesactivar = null">Cancelar</button>
+          <button class="rounded-full bg-red-500 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-red-600" @click="deactivate">Desactivar</button>
+        </div>
+      </div>
+    </div>
 
     <Teleport to="body">
       <div v-if="selectedSupplier" class="fixed inset-0 z-100">

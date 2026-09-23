@@ -6,25 +6,27 @@ import {
   Boxes,
   ChartColumnBig,
   ClipboardList,
-  Package,
   Settings,
   Tag,
+  Tags,
   ShieldCheck,
   ShoppingCart,
   Truck,
   LayoutDashboard,
-  History
-} from 'lucide-vue-next'
+  History, Mail, Sparkles } from 'lucide-vue-next'
 import { useInventoryStore } from '../../stores/inventory'
 import { useOrdersStore } from '../../stores/orders'
 import { useAdminStore } from '../../stores/admin'
 import AdminDashboard from './AdminDashboard.vue'
-import AdminProductos from './AdminProductos.vue'
+import AdminEtiquetas from './AdminEtiquetas.vue'
 import AdminPedidos from './AdminPedidos.vue'
 import AdminHistorial from './AdminHistorial.vue'
+import AdminMensajes from './AdminMensajes.vue'
+import { useContactStore } from '../../stores/contact'
 import AdminReportes from './AdminReportes.vue'
 import AdminConfiguracion from './AdminConfiguracion.vue'
 import AdminPromociones from './AdminPromociones.vue'
+import AdminOfertas from './AdminOfertas.vue'
 import InventorySection from './inventory/InventorySection.vue'
 import AuditLogs from './inventory/AuditLogs.vue'
 import Suppliers from './inventory/Suppliers.vue'
@@ -40,15 +42,21 @@ const router = useRouter()
 
 const loadError = ref('')
 
+// Para el contador de mensajes sin leer de la barra lateral.
+const contacto = useContactStore()
+
 // init() ahora propaga los errores en vez de tragárselos. Si RLS bloquea la
 // lectura o el perfil admin no existe, el panel debe DECIRLO en vez de mostrar
 // tablas vacías, que es exactamente el fallo silencioso que veníamos arrastrando.
 onMounted(async () => {
   try {
-    await Promise.all([inventoryStore.init(), ordersStore.init()])
+    await Promise.all([inventoryStore.initPanel(), ordersStore.init()])
   } catch (error) {
     loadError.value = error?.message || 'No se pudieron cargar los datos del panel.'
   }
+  // Los mensajes van aparte: solo alimentan el contador de la barra lateral,
+  // así que un fallo aquí no debe impedir usar el resto del panel.
+  contacto.init().catch(() => {})
 })
 
 async function logout() {
@@ -74,16 +82,6 @@ async function logout() {
             >
               <LayoutDashboard class="size-5" />
               <span>Dashboard</span>
-            </button>
-          </li>
-          <li>
-            <button
-              class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition"
-              :class="activeSection === 'productos' ? 'bg-[var(--primary)] text-white' : 'text-neutral-600 hover:bg-pink-50 hover:text-[var(--primary)]'"
-              @click="activeSection = 'productos'"
-            >
-              <Package class="size-5" />
-              <span>Productos</span>
             </button>
           </li>
           <li>
@@ -139,6 +137,21 @@ async function logout() {
           <li>
             <button
               class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition"
+              :class="activeSection === 'mensajes' ? 'bg-[var(--primary)] text-white' : 'text-neutral-600 hover:bg-pink-50 hover:text-[var(--primary)]'"
+              @click="activeSection = 'mensajes'"
+            >
+              <Mail class="size-5" />
+              <span>Mensajes</span>
+              <span
+                v-if="contacto.sinLeer"
+                class="ml-auto rounded-full px-2 py-0.5 text-[11px] font-bold"
+                :class="activeSection === 'mensajes' ? 'bg-white text-[var(--primary)]' : 'bg-[var(--primary)] text-white'"
+              >{{ contacto.sinLeer }}</span>
+            </button>
+          </li>
+          <li>
+            <button
+              class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition"
               :class="activeSection === 'proveedores' ? 'bg-[var(--primary)] text-white' : 'text-neutral-600 hover:bg-pink-50 hover:text-[var(--primary)]'"
               @click="activeSection = 'proveedores'"
             >
@@ -164,6 +177,26 @@ async function logout() {
             >
               <Tag class="size-5" />
               <span>Promociones</span>
+            </button>
+          </li>
+          <li>
+            <button
+              class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition"
+              :class="activeSection === 'ofertas' ? 'bg-[var(--primary)] text-white' : 'text-neutral-600 hover:bg-pink-50 hover:text-[var(--primary)]'"
+              @click="activeSection = 'ofertas'"
+            >
+              <Sparkles class="size-5" />
+              <span>Portada</span>
+            </button>
+          </li>
+          <li>
+            <button
+              class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition"
+              :class="activeSection === 'etiquetas' ? 'bg-[var(--primary)] text-white' : 'text-neutral-600 hover:bg-pink-50 hover:text-[var(--primary)]'"
+              @click="activeSection = 'etiquetas'"
+            >
+              <Tags class="size-5" />
+              <span>Etiquetas</span>
             </button>
           </li>
           <li>
@@ -221,15 +254,17 @@ async function logout() {
       </div>
       <div class="w-full min-w-0">
         <AdminDashboard v-if="activeSection === 'dashboard'" />
-        <AdminProductos v-else-if="activeSection === 'productos'" />
         <CatalogSettings v-else-if="activeSection === 'catalogo'" />
         <InventorySection v-else-if="activeSection === 'inventario'" />
         <SalesRegister v-else-if="activeSection === 'ventas'" />
         <AdminPedidos v-else-if="activeSection === 'pedidos'" />
         <AdminHistorial v-else-if="activeSection === 'historial'" />
+        <AdminMensajes v-else-if="activeSection === 'mensajes'" />
         <Suppliers v-else-if="activeSection === 'proveedores'" />
         <MovementHistory v-else-if="activeSection === 'movimientos'" />
         <AdminPromociones v-else-if="activeSection === 'promociones'" />
+        <AdminOfertas v-else-if="activeSection === 'ofertas'" />
+        <AdminEtiquetas v-else-if="activeSection === 'etiquetas'" />
         <AdminReportes v-else-if="activeSection === 'reportes'" />
         <AuditLogs v-else-if="activeSection === 'auditoria'" />
         <AdminConfiguracion v-else />
