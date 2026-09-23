@@ -1,15 +1,18 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { Heart } from 'lucide-vue-next'
 import { useCartStore } from '../stores/cart'
 import { useCatalogStore } from '../stores/catalog'
 import { useInventoryStore } from '../stores/inventory'
+import { useFavoritesStore } from '../stores/favorites'
 import { formatCurrency } from '../utils/formatCurrency'
 
 const route = useRoute()
 const cart = useCartStore()
 const catalogo = useCatalogStore()
 const inventario = useInventoryStore()
+const favoritos = useFavoritesStore()
 
 const quantity = ref(1)
 const added = ref(false)
@@ -21,7 +24,25 @@ onMounted(() => {
 
 const product = computed(() => inventario.catalogWithStock.find((item) => item.id === Number(route.params.id)))
 const tonos = computed(() => inventario.shadesWithStock(Number(route.params.id)))
-const galeria = computed(() => catalogo.imagesOf(Number(route.params.id)))
+/**
+ * La galería: primero las fotos del tono elegido, después las del producto.
+ *
+ * Antes era solo `imagesOf(productId)`, que devuelve únicamente las fotos sin
+ * tono. La foto propia del tono se usaba como imagen principal pero no estaba
+ * en la tira de miniaturas, así que una vez pulsabas otra miniatura no había
+ * forma de volver a ella.
+ */
+const galeria = computed(() => {
+  const id = Number(route.params.id)
+  const delTono = tonoElegido.value ? catalogo.imagesOf(id, tonoElegido.value.id) : []
+  return [...delTono, ...catalogo.imagesOf(id)]
+})
+
+// Cuál está mirando el cliente. `null` = todavía no ha tocado nada, así que
+// manda la foto del tono. Esta variable es la que faltaba: las miniaturas se
+// pintaban como `<img>` sin `@click`, así que eran pura decoración — se veían
+// las cuatro fotos del producto y no se podía abrir ninguna.
+const imagenElegida = ref(null)
 
 // Al abrir la ficha se preselecciona el tono marcado por defecto, o el primero
 // que tenga existencias: obligar a elegir antes de ver el precio es fricción.
@@ -43,13 +64,21 @@ const disponible = computed(() =>
 // Si el tono tiene foto propia se muestra esa: es lo que hace que el cliente
 // vea el labial en el color que va a comprar.
 const imagenPrincipal = computed(() =>
-  tonoElegido.value?.image || galeria.value[0]?.url || product.value?.image || ''
+  imagenElegida.value
+  || tonoElegido.value?.image
+  || galeria.value[0]?.url
+  || ''
 )
 const hayAlgoDisponible = computed(() =>
   tonos.value.length ? tonos.value.some((t) => t.stock > 0) : disponible.value > 0
 )
 
-watch(tonoElegido, () => { quantity.value = 1 })
+// Al cambiar de tono se vuelve a su foto: el cliente acaba de pedir ver ese
+// color, sería raro dejarle la foto del anterior.
+watch(tonoElegido, () => {
+  quantity.value = 1
+  imagenElegida.value = null
+})
 
 function subtonoDe(tono) {
   return catalogo.optionName('undertones', tono.undertoneId)
@@ -90,18 +119,68 @@ function addToCart() {
 
       <div class="grid gap-10 rounded-3xl bg-white p-5 shadow-sm sm:p-8 md:grid-cols-2">
         <div>
-          <div class="flex min-h-96 items-center justify-center rounded-2xl bg-pink-50">
-            <img v-if="imagenPrincipal" :src="imagenPrincipal" :alt="product.name" class="max-h-125 w-full object-contain p-5" />
+          <!--
+            Recuadro cuadrado y FIJO. Antes era `min-h-96` con la imagen a lo
+            alto que quisiera: una foto vertical estiraba el bloque, una
+            horizontal lo encogía, y al pasar de una miniatura a otra la
+            página entera daba un salto. Con una proporción fija el recuadro
+            no se mueve nunca y la foto se acomoda dentro con `object-contain`,
+            que la muestra completa sin recortarla ni deformarla.
+          -->
+          <div class="grid aspect-square w-full place-items-center overflow-hidden rounded-2xl bg-pink-50">
+            <img
+              v-if="imagenPrincipal"
+              :src="imagenPrincipal"
+              :alt="product.name"
+              class="h-full w-full object-contain p-5"
+            />
             <span v-else class="text-sm text-neutral-400">Sin imagen</span>
           </div>
-          <div v-if="galeria.length > 1" class="mt-3 flex gap-2 overflow-x-auto">
-            <img v-for="img in galeria" :key="img.id" :src="img.url" :alt="img.alt || ''" class="size-16 shrink-0 rounded-xl border border-pink-100 object-cover" />
+<div v-if="galeria.length > 1" class="mt-3 flex gap-2 overflow-x-auto pb-1">
+            <button
+              v-for="(img, i) in galeria"
+              :key="img.id"
+              type="button"
+              class="size-16 shrink-0 overflow-hidden rounded-xl border-2 bg-white transition outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2"
+              :class="imagenPrincipal === img.url
+                ? 'border-[var(--primary)]'
+                : 'border-pink-100 hover:border-pink-300'"
+              :aria-label="`Ver foto ${i + 1} de ${galeria.length}`"
+              :aria-current="imagenPrincipal === img.url"
+              @click="imagenElegida = img.url"
+            >
+              <img :src="img.url" :alt="img.alt || ''" class="h-full w-full object-cover" loading="lazy" />
+            </button>
           </div>
         </div>
 
         <div class="py-2">
           <p class="text-sm font-bold tracking-wider text-[var(--primary)]">{{ product.category }}</p>
-          <h1 class="mt-3 text-4xl font-bold leading-tight text-black">{{ product.name }}</h1>
+
+          <!-- Las etiquetas van sobre el nombre: son el motivo por el que la
+               clienta entró a esta ficha desde la tarjeta. -->
+          <div v-if="product.badges?.length" class="mt-3 flex flex-wrap gap-2">
+            <span
+              v-for="etiqueta in product.badges" :key="etiqueta.id"
+              class="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide"
+              :style="{ background: etiqueta.colorFondo, color: etiqueta.colorTexto }"
+            >{{ etiqueta.name }}</span>
+          </div>
+
+          <div class="mt-3 flex items-start justify-between gap-4">
+            <h1 class="text-4xl font-bold leading-tight text-black">{{ product.name }}</h1>
+            <button
+              class="mt-1 grid size-11 shrink-0 place-items-center rounded-full transition hover:bg-pink-50 hover:text-[var(--primary)]"
+              :class="favoritos.esFavorito(product.id) ? 'text-[var(--primary)]' : 'text-neutral-400'"
+              :aria-pressed="favoritos.esFavorito(product.id)"
+              :aria-label="favoritos.esFavorito(product.id) ? 'Quitar de favoritos' : 'Guardar en favoritos'"
+              :title="favoritos.esFavorito(product.id) ? 'Quitar de favoritos' : 'Guardar en favoritos'"
+              type="button"
+              @click="favoritos.alternar(product.id)"
+            >
+              <Heart class="size-6" :fill="favoritos.esFavorito(product.id) ? 'currentColor' : 'none'" />
+            </button>
+          </div>
           <div class="mt-5 flex flex-wrap items-center gap-3">
             <p class="text-3xl font-bold text-[var(--primary)]">{{ formatCurrency(precio) }}</p>
             <p v-if="enPromocion" class="text-xl text-neutral-400 line-through">{{ formatCurrency(precioBase) }}</p>
