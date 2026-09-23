@@ -1,18 +1,20 @@
 <script setup>
 import { computed } from 'vue'
 import { useInventoryStore } from '../../../stores/inventory'
+import { useCatalogStore } from '../../../stores/catalog'
 import { formatCurrency } from '../../../utils/formatCurrency'
 
 const store = useInventoryStore()
+const catalogo = useCatalogStore()
 const movements = computed(() => store.movements)
 const typeLabels = { purchase: 'Compra', online_order: 'Pedido online', transfer: 'Transferencia', sale: 'Venta', return: 'Devolución', adjustment: 'Ajuste', damage: 'Daño' }
 
 function productName(movement) {
-  return store.catalog.find((product) => product.id === movement.productId)?.name || 'Producto eliminado'
+  return catalogo.productById(movement.productId)?.name || 'Producto eliminado'
 }
 
 function variantName(movement) {
-  return store.variants.find((variant) => variant.id === movement.variantId)?.name || ''
+  return catalogo.shades.find((tono) => tono.id === movement.variantId)?.name || ''
 }
 
 function formatDate(value) {
