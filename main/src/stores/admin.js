@@ -8,6 +8,9 @@ const allSections = ['productos', 'inventario', 'pedidos', 'historial', 'auditor
 export const useAdminStore = defineStore('admin', {
   state: () => ({
     authenticated: false,
+    // El correo de la sesión, para poder mostrar en Configuración con qué
+    // cuenta se está trabajando. No se persiste: sale de Supabase Auth.
+    email: '',
     role: localStorage.getItem(roleKey) || masterAdminRole,
     initialized: false
   }),
@@ -37,6 +40,7 @@ export const useAdminStore = defineStore('admin', {
 
       if (profile) {
         this.authenticated = true
+        this.email = session.user.email || ''
         this.role = profile.role || masterAdminRole
         localStorage.setItem(roleKey, this.role)
       } else {
@@ -72,6 +76,7 @@ export const useAdminStore = defineStore('admin', {
 
       this.authenticated = true
       this.initialized = true
+      this.email = data.user.email || normalizedEmail
       this.role = profile.role || masterAdminRole
       localStorage.setItem(roleKey, this.role)
     },
@@ -81,6 +86,7 @@ export const useAdminStore = defineStore('admin', {
       localStorage.removeItem(roleKey)
       this.authenticated = false
       this.initialized = true
+      this.email = ''
       this.role = masterAdminRole
     }
   }

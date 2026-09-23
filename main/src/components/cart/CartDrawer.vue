@@ -1,13 +1,17 @@
-<script setup>
+﻿<script setup>
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useCartStore } from '../../stores/cart'
-import { storeSettings } from '../../data/mockData'
+import { useSettingsStore } from '../../stores/settings'
 import { formatCurrency } from '../../utils/formatCurrency'
 
 const cart = useCartStore()
-const remaining = computed(() => Math.max(storeSettings.freeShippingThreshold - cart.subtotal, 0))
-const progress = computed(() => Math.min((cart.subtotal / storeSettings.freeShippingThreshold) * 100, 100))
+const settings = useSettingsStore()
+const remaining = computed(() => Math.max(settings.umbralEnvioGratis - cart.subtotal, 0))
+// Sin umbral configurado no hay barra que llenar: dividir por 0 daba NaN.
+const progress = computed(() => settings.umbralEnvioGratis > 0
+  ? Math.min((cart.subtotal / settings.umbralEnvioGratis) * 100, 100)
+  : 100)
 </script>
 
 <template>

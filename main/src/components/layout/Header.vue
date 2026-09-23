@@ -1,10 +1,13 @@
 <script setup>
 import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import { Heart } from 'lucide-vue-next'
 import { useCartStore } from '../../stores/cart'
+import { useFavoritesStore } from '../../stores/favorites'
 import logo from '../../assets/images/strawberrymakeup.png'
 
 const cart = useCartStore()
+const favoritos = useFavoritesStore()
 const menuOpen = ref(false)
 
 function closeMenu() {
@@ -24,15 +27,15 @@ function closeMenu() {
 
       <div class="hidden items-center gap-7 lg:ml-12 lg:flex">
         <RouterLink class="text-sm font-bold transition hover:text-[var(--primary)]" to="/">Home</RouterLink>
-        <RouterLink class="text-sm font-bold transition hover:text-[var(--primary)]" to="/tienda">Shop</RouterLink>
+        <RouterLink class="text-sm font-bold transition hover:text-[var(--primary)]" to="/tienda">Tienda</RouterLink>
         <RouterLink class="text-sm font-bold transition hover:text-[var(--primary)]" :to="{ path: '/tienda', query: { ofertas: 'true' } }">Ofertas</RouterLink>
         <RouterLink class="text-sm font-bold transition hover:text-[var(--primary)]" to="/nosotros">Nosotros</RouterLink>
         <RouterLink class="text-sm font-bold transition hover:text-[var(--primary)]" to="/contacto">Contacto</RouterLink>
       </div>
 
-      <div class="flex items-center gap-1 sm:gap-3"><RouterLink class="hidden rounded-full p-2 transition hover:bg-white/60 sm:block" to="/admin" aria-label="Mi cuenta"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3"/><path d="M5 21a7 7 0 0 1 14 0"/></svg></RouterLink><button class="relative rounded-full p-2 transition hover:bg-white/60" aria-label="Carrito" @click="cart.openDrawer"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h2l2.2 11.1a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.6L20 8H7"/><circle cx="10" cy="20" r="1"/><circle cx="17" cy="20" r="1"/></svg><span v-if="cart.count" class="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-[var(--primary)] text-[10px] font-bold text-white">{{ cart.count }}</span></button></div>
+      <div class="flex items-center gap-1 sm:gap-3"><RouterLink class="hidden size-11 place-items-center rounded-full transition hover:bg-white/60 sm:grid" to="/admin" aria-label="Mi cuenta"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3"/><path d="M5 21a7 7 0 0 1 14 0"/></svg></RouterLink><RouterLink class="relative grid size-11 place-items-center rounded-full transition hover:bg-white/60" to="/favoritos" :aria-label="favoritos.count ? `Favoritos, ${favoritos.count} guardados` : 'Favoritos'"><Heart class="size-5" :fill="favoritos.count ? 'currentColor' : 'none'" :class="favoritos.count ? 'text-[var(--primary)]' : ''" /><span v-if="favoritos.count" class="absolute right-0.5 top-0.5 grid size-4 place-items-center rounded-full bg-[var(--primary)] text-[10px] font-bold text-white">{{ favoritos.count }}</span></RouterLink><button class="relative grid size-11 place-items-center rounded-full transition hover:bg-white/60" aria-label="Carrito" @click="cart.openDrawer"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h2l2.2 11.1a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.6L20 8H7"/><circle cx="10" cy="20" r="1"/><circle cx="17" cy="20" r="1"/></svg><span v-if="cart.count" class="absolute right-0.5 top-0.5 grid size-4 place-items-center rounded-full bg-[var(--primary)] text-[10px] font-bold text-white">{{ cart.count }}</span></button></div>
     </nav>
 
-    <div v-if="menuOpen" class="border-t border-pink-200 bg-white px-5 py-4 shadow-lg lg:hidden"><div class="flex flex-col"><RouterLink class="border-b border-pink-100 py-3 font-bold" to="/" @click="closeMenu">Home</RouterLink><RouterLink class="border-b border-pink-100 py-3 font-bold" to="/tienda" @click="closeMenu">Shop</RouterLink><RouterLink class="border-b border-pink-100 py-3 font-bold" :to="{ path: '/tienda', query: { ofertas: 'true' } }" @click="closeMenu">Ofertas</RouterLink><RouterLink class="border-b border-pink-100 py-3 font-bold" to="/nosotros" @click="closeMenu">Nosotros</RouterLink><RouterLink class="border-b border-pink-100 py-3 font-bold" to="/contacto" @click="closeMenu">Contacto</RouterLink></div></div>
+    <div v-if="menuOpen" class="border-t border-pink-200 bg-white px-5 py-4 shadow-lg lg:hidden"><div class="flex flex-col"><RouterLink class="border-b border-pink-100 py-3 font-bold" to="/" @click="closeMenu">Home</RouterLink><RouterLink class="border-b border-pink-100 py-3 font-bold" to="/tienda" @click="closeMenu">Shop</RouterLink><RouterLink class="border-b border-pink-100 py-3 font-bold" :to="{ path: '/tienda', query: { ofertas: 'true' } }" @click="closeMenu">Ofertas</RouterLink><RouterLink class="border-b border-pink-100 py-3 font-bold" to="/nosotros" @click="closeMenu">Nosotros</RouterLink><RouterLink class="border-b border-pink-100 py-3 font-bold" to="/contacto" @click="closeMenu">Contacto</RouterLink><RouterLink class="flex items-center gap-2 py-3 font-bold" to="/favoritos" @click="closeMenu"><Heart class="size-4" :fill="favoritos.count ? 'currentColor' : 'none'" /> Favoritos<span v-if="favoritos.count" class="grid size-5 place-items-center rounded-full bg-[var(--primary)] text-[10px] font-bold text-white">{{ favoritos.count }}</span></RouterLink></div></div>
   </header>
 </template>

@@ -1,5 +1,13 @@
-<script setup>
-import { socialLinks } from '../../data/mockData'
+﻿<script setup>
+import { computed, onMounted } from 'vue'
+import { useSettingsStore } from '../../stores/settings'
+
+// Las redes salen de `store_settings`, no de una constante: la
+// administradora puede cambiarlas desde Configuración.
+const settings = useSettingsStore()
+const socialLinks = computed(() => settings.redes)
+
+onMounted(() => { settings.init().catch(() => {}) })
 </script>
 
 <template>
