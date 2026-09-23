@@ -49,6 +49,9 @@ function mapearProducto(fila) {
     categoryId: fila.category_id,
     subcategoryId: fila.subcategory_id,
     brandId: fila.brand_id,
+    // Migración 026. Un producto pertenece como mucho a una colección; borrar
+    // la colección lo deja suelto (`on delete set null`), no lo borra.
+    collectionId: fila.collection_id ?? null,
     skinTypeId: fila.skin_type_id,
     finishId: fila.finish_id,
     coverageId: fila.coverage_id,
@@ -56,10 +59,9 @@ function mapearProducto(fila) {
     barcode: fila.barcode || '',
     price: Number(fila.price) || 0,
     salePrice: fila.sale_price != null ? Number(fila.sale_price) : null,
-    image: fila.image || '',
-    isFeatured: fila.is_featured === true,
-    isNew: fila.is_new !== false,
-    isRecommended: fila.is_recommended === true,
+    // `is_featured`, `is_new` e `is_recommended` ya no existen: eran tres
+    // booleanos fijos que además no se veían en ninguna parte de la tienda.
+    // Ahora son etiquetas editables (migración 020) y viven en `badgesOf`.
     status: fila.status || 'draft',
     active: fila.active !== false,
     updatedAt: fila.updated_at
@@ -89,6 +91,19 @@ function mapearTono(fila) {
   }
 }
 
+function mapearEtiqueta(fila) {
+  return {
+    id: fila.id,
+    name: fila.name,
+    slug: fila.slug,
+    description: fila.description || '',
+    colorFondo: fila.color_fondo,
+    colorTexto: fila.color_texto,
+    position: fila.position ?? 0,
+    active: fila.active !== false
+  }
+}
+
 export const useCatalogStore = defineStore('catalog', {
   state: () => ({
     products: [],
@@ -101,6 +116,9 @@ export const useCatalogStore = defineStore('catalog', {
     coverages: [],
     undertones: [],
     shadeFamilies: [],
+    // Etiquetas de la tarjeta (VIRAL, NUEVO…) y a qué productos van puestas.
+    badges: [],
+    badgeAssignments: [],
     // Precios ya resueltos por la base, con la promoción aplicada.
     storefrontShades: [],
     storefrontProducts: [],
@@ -136,7 +154,29 @@ export const useCatalogStore = defineStore('catalog', {
       state.images.find((i) => i.product_id === Number(productId) && !i.variant_id) || null,
 
     // Nombre de una opción maestra, para mostrarla sin repetir búsquedas.
-    optionName: (state) => (tipo, id) => state[tipo]?.find((o) => o.id === id)?.name || ''
+    optionName: (state) => (tipo, id) => state[tipo]?.find((o) => o.id === id)?.name || '',
+
+    /** Etiquetas activas, en el orden en que se colocaron en el panel. */
+    activeBadges: (state) => state.badges.filter((b) => b.active).sort((a, b) => a.position - b.position),
+
+    /**
+     * Etiquetas puestas a un producto. Solo las activas: apagar una etiqueta
+     * la retira de la tienda sin perder a qué productos estuvo puesta, así que
+     * el filtro tiene que estar aquí y no al cargar.
+     */
+    badgesOf: (state) => (productId) => {
+      const id = Number(productId)
+      const puestas = state.badgeAssignments
+        .filter((a) => a.product_id === id)
+        .map((a) => a.badge_id)
+      return state.badges
+        .filter((b) => b.active && puestas.includes(b.id))
+        .sort((a, b) => a.position - b.position)
+    },
+
+    /** Cuántos productos lleva cada etiqueta, para la pantalla del panel. */
+    badgeUsage: (state) => (badgeId) =>
+      state.badgeAssignments.filter((a) => a.badge_id === Number(badgeId)).length
   },
 
   actions: {
@@ -163,13 +203,17 @@ export const useCatalogStore = defineStore('catalog', {
       this.error = null
 
       try {
-        const [productos, tonos, imagenes, categorias, vitrinaTonos, vitrinaProductos] = await Promise.all([
+        const [
+          productos, tonos, imagenes, categorias, vitrinaTonos, vitrinaProductos, etiquetas, asignaciones
+        ] = await Promise.all([
           supabase.from('products').select('*').order('id'),
           supabase.from('product_variants').select('*').order('product_id').order('position'),
           supabase.from('product_images').select('*').order('position'),
           supabase.from('categories').select('*').order('name'),
           supabase.from('storefront_shades').select('*'),
-          supabase.from('storefront_products').select('*')
+          supabase.from('storefront_products').select('*'),
+          supabase.from('product_badges').select('*').order('position'),
+          supabase.from('product_badge_assignments').select('*')
         ])
 
         if (productos.error) throw productos.error
@@ -178,6 +222,8 @@ export const useCatalogStore = defineStore('catalog', {
         this.images = imagenes.data || []
         this.storefrontShades = vitrinaTonos.data || []
         this.storefrontProducts = vitrinaProductos.data || []
+        this.badges = (etiquetas.data || []).map(mapearEtiqueta)
+        this.badgeAssignments = asignaciones.data || []
         this.categories = (categorias.data || []).map((c) => ({
           id: c.id,
           name: c.name,
@@ -229,6 +275,7 @@ export const useCatalogStore = defineStore('catalog', {
         category_id: producto.categoryId || null,
         subcategory_id: producto.subcategoryId || null,
         brand_id: producto.brandId || null,
+        collection_id: producto.collectionId || null,
         skin_type_id: producto.skinTypeId || null,
         finish_id: producto.finishId || null,
         coverage_id: producto.coverageId || null,
@@ -236,9 +283,6 @@ export const useCatalogStore = defineStore('catalog', {
         barcode: producto.barcode || null,
         price: Number(producto.price) || 0,
         sale_price: producto.salePrice ? Number(producto.salePrice) : null,
-        is_featured: producto.isFeatured === true,
-        is_new: producto.isNew !== false,
-        is_recommended: producto.isRecommended === true,
         status: producto.status || 'draft',
         // La tienda filtra por `active`; el estado de publicación manda sobre él.
         active: (producto.status || 'draft') === 'active'
@@ -260,8 +304,6 @@ export const useCatalogStore = defineStore('catalog', {
     },
 
     async setProductStatus(productId, status) {
-      const producto = this.productById(productId)
-      const anterior = producto?.status
       const { data, error } = await supabase
         .from('products')
         .update({ status, active: status === 'active' })
@@ -273,15 +315,117 @@ export const useCatalogStore = defineStore('catalog', {
       const i = this.products.findIndex((p) => p.id === productId)
       if (i !== -1) this.products[i] = mapearProducto(data)
 
-      await logAudit({
-        table: 'products',
-        recordId: productId,
-        action: 'STATUS_CHANGED',
-        oldData: { status: anterior },
-        newData: { status },
-        note: `Publicación: ${anterior || 'sin estado'} → ${status}`
-      })
+      // Sin `logAudit`: el trigger `audit_trigger` ya registra este UPDATE con
+      // el diff completo ("Estado: draft → active · Visible en tienda: no →
+      // sí"), que dice más que una nota escrita a mano. Duplicarlo hacía que
+      // la trazabilidad contara el mismo cambio dos veces.
       return this.products[i]
+    },
+
+    // ================================================================
+    // ETIQUETAS  (migración 020)
+    //
+    // Son escaparate: NO cambian el precio ni el stock. Una etiqueta que diga
+    // «2x1» lo anuncia, no lo crea — el descuento lo cobra el servidor desde
+    // `promotions`. Si algún día se enlazan, que sea la etiqueta la que lea la
+    // promoción, nunca al revés.
+    // ================================================================
+
+    /**
+     * Crea o edita una etiqueta.
+     *
+     * NO calcula el `slug`: lo genera la base (trigger de la migración 023).
+     * Antes se calculaba aquí, mirando la lista local para numerar los
+     * repetidos, y eso solo funciona si esa lista está completa y al día.
+     * Cuando no lo estaba —la pantalla abierta antes de que terminara de
+     * cargar el catálogo, otra pestaña creando etiquetas, una carga fallida en
+     * silencio— el INSERT llegaba con un slug ya usado y la base respondía
+     * «duplicate key value violates unique constraint», que no le dice nada a
+     * quien solo quería ponerle nombre a una etiqueta.
+     *
+     * La unicidad de una clave solo la puede garantizar quien ve todas las
+     * filas. Es la misma lección del costo de envío y del precio de los
+     * combos: un valor, un sitio que lo calcula.
+     */
+    async saveBadge(etiqueta) {
+      const nombre = String(etiqueta.name || '').trim()
+      if (!nombre) throw new Error('La etiqueta necesita un nombre.')
+      if (nombre.length > 24) throw new Error('El nombre de la etiqueta no puede pasar de 24 caracteres.')
+
+      const fila = {
+        name: nombre,
+        description: etiqueta.description?.trim() || null,
+        color_fondo: etiqueta.colorFondo || '#a855f7',
+        color_texto: etiqueta.colorTexto || '#ffffff',
+        position: Number(etiqueta.position) || 0,
+        active: etiqueta.active !== false
+      }
+
+      if (etiqueta.id) {
+        const { data, error } = await supabase
+          .from('product_badges').update(fila).eq('id', etiqueta.id).select().single()
+        if (error) throw new Error(`No se pudo guardar la etiqueta: ${error.message}`)
+        const i = this.badges.findIndex((b) => b.id === etiqueta.id)
+        if (i !== -1) this.badges[i] = mapearEtiqueta(data)
+        return this.badges[i]
+      }
+
+      const posicion = fila.position || (Math.max(0, ...this.badges.map((b) => b.position)) + 1)
+
+      // Sin `slug`: lo pone el trigger, y si el nombre choca con otro lo
+      // numera él. Dos etiquetas llamadas «NUEVO» son raras pero no son un
+      // error del usuario; perder lo escrito por un detalle interno sí.
+      const { data, error } = await supabase
+        .from('product_badges').insert({ ...fila, position: posicion }).select().single()
+      if (error) throw new Error(`No se pudo crear la etiqueta: ${error.message}`)
+      const nueva = mapearEtiqueta(data)
+      this.badges.push(nueva)
+      return nueva
+    },
+
+    /**
+     * Borrar de verdad. La base tiene `on delete cascade`, así que se lleva
+     * también sus asignaciones: por eso la pantalla avisa de a cuántos
+     * productos afecta antes de preguntar. Apagarla (`active = false`) es la
+     * opción reversible y es la que se ofrece primero.
+     */
+    async deleteBadge(badgeId) {
+      const { error } = await supabase.from('product_badges').delete().eq('id', badgeId)
+      if (error) throw new Error(`No se pudo borrar la etiqueta: ${error.message}`)
+      this.badges = this.badges.filter((b) => b.id !== badgeId)
+      this.badgeAssignments = this.badgeAssignments.filter((a) => a.badge_id !== badgeId)
+    },
+
+    /**
+     * Qué etiquetas lleva un producto. Se recibe la lista completa y se
+     * calcula la diferencia: así el editor manda su estado final sin tener
+     * que llevar la cuenta de qué casilla se marcó y cuál se desmarcó.
+     */
+    async setProductBadges(productId, badgeIds) {
+      const id = Number(productId)
+      const quiere = [...new Set((badgeIds || []).map(Number))]
+      const tiene = this.badgeAssignments.filter((a) => a.product_id === id).map((a) => a.badge_id)
+
+      const aPoner = quiere.filter((b) => !tiene.includes(b))
+      const aQuitar = tiene.filter((b) => !quiere.includes(b))
+
+      if (aPoner.length) {
+        const { error } = await supabase
+          .from('product_badge_assignments')
+          .insert(aPoner.map((badge_id) => ({ product_id: id, badge_id })))
+        if (error) throw new Error(`No se pudieron poner las etiquetas: ${error.message}`)
+      }
+
+      if (aQuitar.length) {
+        const { error } = await supabase
+          .from('product_badge_assignments')
+          .delete().eq('product_id', id).in('badge_id', aQuitar)
+        if (error) throw new Error(`No se pudieron quitar las etiquetas: ${error.message}`)
+      }
+
+      // El estado local se sincroniza solo después de que la base confirme.
+      this.badgeAssignments = this.badgeAssignments.filter((a) => a.product_id !== id)
+      quiere.forEach((badge_id) => this.badgeAssignments.push({ product_id: id, badge_id }))
     },
 
     /**
@@ -291,6 +435,137 @@ export const useCatalogStore = defineStore('catalog', {
      */
     async archiveProduct(productId) {
       return this.setProductStatus(productId, 'archived')
+    },
+
+    /**
+     * Cambia el precio de lista del producto.
+     *
+     * OJO: mueve también el precio de todos los tonos que heredan (los que
+     * tienen `price` en `null`). Para cambiar UN tono sin tocar el resto es
+     * `setShadePrice`. La distinción no es cosmética: editar el precio desde
+     * la fila de un tono llamaba aquí, y movía los seis.
+     *
+     * Vivía en `inventory.js` como `updateSalePrice`, donde además actualizaba
+     * la columna `price` en la base pero escribía `salePrice` en el objeto
+     * local: justo después de editar se veía un precio y, al recargar, otro.
+     */
+    async setProductPrice(productId, precio) {
+      const producto = this.productById(productId)
+      if (!producto) throw new Error('No se encontró el producto.')
+
+      const nuevo = Number(precio)
+      if (!Number.isFinite(nuevo) || nuevo < 0) {
+        throw new Error('El precio debe ser un número mayor o igual a cero.')
+      }
+      if (producto.price === nuevo) return producto
+
+      // Sin `logAudit`: el trigger ya deja constancia del cambio de precio con
+      // su antes y su después. Duplicarlo lo contaría dos veces en la
+      // trazabilidad del producto.
+      return this.saveProduct({ ...producto, price: nuevo })
+    },
+
+    /**
+     * Devuelve un SKU que no choque con ninguno existente.
+     *
+     * `suggestSku` compone marca + nombre + código, y una copia comparte los
+     * tres: "Base Velvet Skin" y "Base Velvet Skin (copia)" recortan al mismo
+     * "BASEVE". El índice único de la base rechazaría el insert a mitad de
+     * camino y la copia quedaría con la mitad de los tonos.
+     */
+    skuLibre(base) {
+      const usados = new Set(this.shades.map((s) => s.sku).filter(Boolean))
+      if (!base) return ''
+      if (!usados.has(base)) return base
+      for (let n = 2; n < 500; n += 1) {
+        const intento = `${base}-${n}`
+        if (!usados.has(intento)) return intento
+      }
+      return `${base}-${Date.now()}`
+    },
+
+    /**
+     * Duplica un producto con todos sus tonos.
+     *
+     * Una segunda base de la misma marca son cuarenta tonos tecleados otra
+     * vez. Se copia la ficha y la gama; **no** se copian existencias (el stock
+     * se deriva de `inventory_movements`, no hay nada que copiar) ni las
+     * imágenes (son fotos de otro producto: apuntar dos fichas al mismo
+     * archivo hace que borrar una rompa la otra).
+     *
+     * La copia nace en borrador a propósito: nadie quiere publicar por
+     * accidente un duplicado a medio editar.
+     */
+    async duplicateProduct(productId) {
+      const original = this.productById(productId)
+      if (!original) throw new Error('No se encontró el producto que quieres duplicar.')
+
+      const copia = await this.saveProduct({
+        ...original,
+        id: null,
+        name: `${original.name} (copia)`,
+        barcode: '',
+        status: 'draft'
+      })
+
+      // Las etiquetas tampoco se copian: «VIRAL» lo es el original, no su
+      // duplicado a medio editar. Se ponen a mano cuando toque.
+
+      const tonos = this.shadesOf(productId)
+      if (tonos.length) {
+        const filas = tonos.map((tono, indice) => ({
+          product_id: copia.id,
+          name: tono.name,
+          shade_code: tono.shadeCode || null,
+          sku: this.skuLibre(this.suggestSku(copia.id, tono.shadeCode || tono.name)),
+          // El código de barras es del envase físico del original: si se
+          // copiara, dos productos distintos leerían igual en el escáner.
+          barcode: null,
+          price: tono.price,
+          compare_at_price: tono.compareAtPrice,
+          swatch_hex: tono.swatchHex || null,
+          swatch_image_url: tono.swatchImageUrl || null,
+          undertone_id: tono.undertoneId || null,
+          shade_family_id: tono.shadeFamilyId || null,
+          depth: tono.depth,
+          // Se renumera en vez de copiar `position`: `shadesOf` ya los
+          // devuelve en el orden en que se exhiben, y los originales pueden
+          // traer posiciones repetidas de cargas antiguas. La copia nace
+          // ordenada aunque el original no lo esté.
+          position: indice + 1,
+          is_default: tono.isDefault === true,
+          is_active: true
+        }))
+
+        // `skuLibre` mira `this.shades`, que todavía no contiene las filas de
+        // esta misma tanda: sin esto, dos tonos de la copia podrían pedir el
+        // mismo SKU y el insert entero se caería.
+        const pedidos = new Set()
+        filas.forEach((fila) => {
+          let sku = fila.sku
+          let n = 2
+          while (sku && pedidos.has(sku)) {
+            sku = `${fila.sku}-${n}`
+            n += 1
+          }
+          fila.sku = sku
+          if (sku) pedidos.add(sku)
+        })
+
+        const { data, error } = await supabase.from('product_variants').insert(filas).select()
+        if (error) throw new Error(this.explicarErrorTono(error))
+        this.shades.push(...(data || []).map(mapearTono))
+      }
+
+      await logAudit({
+        table: 'products',
+        recordId: copia.id,
+        action: 'DUPLICATED',
+        newData: { from: productId, name: copia.name, tonos: tonos.length },
+        note: `Duplicado de "${original.name}" con ${tonos.length} tono(s)`
+      })
+
+      return copia
     },
 
     // ================================================================
@@ -506,6 +781,41 @@ export const useCatalogStore = defineStore('catalog', {
       return nuevo
     },
 
+    /**
+     * Cambia el precio de UN tono, o lo devuelve a heredar del producto.
+     *
+     * Existe aparte de `updateSalePrice` porque esa toca el producto entero.
+     * Editar el precio desde la fila de un tono y que se moviera el precio
+     * base —y con él el de todos los demás tonos que heredan— es un desastre
+     * silencioso: los otros tonos cambian de precio sin que nadie lo pida.
+     *
+     * `null` significa heredar, no gratis.
+     */
+    async setShadePrice(variantId, price) {
+      const tono = this.shades.find((s) => s.id === variantId)
+      if (!tono) throw new Error('No se encontró el tono.')
+
+      const nuevo = price === '' || price == null ? null : Number(price)
+      if (nuevo != null && (!Number.isFinite(nuevo) || nuevo < 0)) {
+        throw new Error('El precio debe ser un número mayor o igual a cero.')
+      }
+      if (tono.price === nuevo) return tono
+
+      const { data, error } = await supabase
+        .from('product_variants')
+        .update({ price: nuevo })
+        .eq('id', variantId)
+        .select()
+        .single()
+      if (error) throw new Error(this.explicarErrorTono(error))
+
+      const i = this.shades.findIndex((s) => s.id === variantId)
+      if (i !== -1) this.shades[i] = mapearTono(data)
+
+      // El trigger ya registra el cambio de `price` con su antes y su después.
+      return this.shades[i]
+    },
+
     /** Traduce los errores de la base a algo que se entienda. */
     explicarErrorTono(error) {
       const mensaje = error.message || ''
@@ -596,6 +906,29 @@ export const useCatalogStore = defineStore('catalog', {
       if (esPrincipal) this.images.forEach((i) => { if (i.product_id === productId) i.is_primary = false })
       this.images.push(imagen)
       return imagen
+    },
+
+    /**
+     * Línea de tiempo de un producto.
+     *
+     * Se pide a la vista `report_trazabilidad`, que ya une movimientos de
+     * inventario con la auditoría de la ficha y de los tonos, y traduce los
+     * `jsonb` a frases. Unirlo aquí serían tres consultas y una segunda copia
+     * de esa traducción.
+     *
+     * No se guarda en el store: es historia, se consulta cuando se abre la
+     * pestaña y no hace falta tenerla en memoria el resto del tiempo.
+     */
+    async trazabilidadDe(productId, limite = 200) {
+      const { data, error } = await supabase
+        .from('report_trazabilidad')
+        .select('*')
+        .eq('product_id', productId)
+        .order('fecha', { ascending: false })
+        .limit(limite)
+
+      if (error) throw new Error(`No se pudo cargar la trazabilidad: ${error.message}`)
+      return data || []
     },
 
     async removeImage(imagen) {

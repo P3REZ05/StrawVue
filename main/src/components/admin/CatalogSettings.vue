@@ -1,8 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useInventoryStore } from '../../stores/inventory'
+import { useCatalogStore } from '../../stores/catalog'
 
-const inventory = useInventoryStore()
+const catalogo = useCatalogStore()
 const activeTab = ref('categories')
 const formName = ref('')
 const parentId = ref('')
@@ -15,10 +15,22 @@ const tabs = [
   { id: 'coverages', label: 'Coberturas' }
 ]
 
-const currentOptions = computed(() => inventory[activeTab.value] || [])
-const categoryOptions = computed(() => inventory.categories.filter((item) => !item.parentId))
+// Las cinco pestañas mapean a cinco listas del store de catálogo. El acceso va
+// por un mapa explícito y no por `catalogo[activeTab.value]`: con el índice
+// dinámico, renombrar una lista en el store dejaba la pestaña vacía sin que
+// nada fallara — el linter no puede ver dentro de un corchete.
+const LISTAS = {
+  categories: () => catalogo.categories,
+  brands: () => catalogo.brands,
+  skinTypes: () => catalogo.skinTypes,
+  finishes: () => catalogo.finishes,
+  coverages: () => catalogo.coverages
+}
 
-onMounted(() => { inventory.init().catch(() => {}) })
+const currentOptions = computed(() => LISTAS[activeTab.value]?.() || [])
+const categoryOptions = computed(() => catalogo.categories.filter((item) => !item.parentId))
+
+onMounted(() => { catalogo.init().catch(() => {}) })
 
 function resetForm() {
   formName.value = ''
@@ -35,9 +47,9 @@ async function save() {
   errorMessage.value = ''
   try {
     if (activeTab.value === 'categories') {
-      await inventory.saveCategory({ name: formName.value, parentId: parentId.value ? Number(parentId.value) : null })
+      await catalogo.saveCategory({ name: formName.value, parentId: parentId.value ? Number(parentId.value) : null })
     } else {
-      await inventory.saveCatalogOption(activeTab.value, { name: formName.value })
+      await catalogo.saveOption(activeTab.value, { name: formName.value })
     }
     resetForm()
   } catch (error) {
@@ -48,9 +60,9 @@ async function save() {
 async function toggleOption(option) {
   try {
     if (activeTab.value === 'categories') {
-      await inventory.saveCategory({ ...option, active: option.active === false })
+      await catalogo.saveCategory({ ...option, active: option.active === false })
     } else {
-      await inventory.saveCatalogOption(activeTab.value, { ...option, active: option.active === false })
+      await catalogo.saveOption(activeTab.value, { ...option, active: option.active === false })
     }
   } catch (error) {
     errorMessage.value = error.message || 'No se pudo actualizar la opción.'

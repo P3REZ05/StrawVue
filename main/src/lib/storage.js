@@ -73,6 +73,57 @@ export async function subirImagen(archivo, { productId, variantId = null, perfil
   }
 }
 
+/**
+ * Imagen que no pertenece a ningún producto: la cabecera de una colección, y
+ * cualquier material de portada que venga después.
+ *
+ * Va al mismo bucket que las fotos de producto pero bajo su propia carpeta, no
+ * dentro de `productos/{id}/`: borrar un producto no debe llevarse por delante
+ * la foto de la campaña en la que salía.
+ */
+export async function subirImagenSuelta(archivo, carpeta, alt = null) {
+  const optimizada = await optimizarImagen(archivo, 'producto')
+  const ruta = `${carpeta}/${idUnico()}-${optimizada.nombre}`
+
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(ruta, optimizada.blob, {
+      contentType: optimizada.tipo,
+      cacheControl: '31536000',
+      upsert: false
+    })
+
+  if (error) {
+    if (error.message?.includes('Bucket not found')) {
+      throw new Error(`No existe el bucket "${BUCKET}" en Supabase Storage.`)
+    }
+    throw new Error(`No se pudo subir la imagen: ${error.message}`)
+  }
+
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(ruta)
+
+  return {
+    url: data.publicUrl,
+    storage_path: ruta,
+    alt: alt || optimizada.nombre.replace(/\.[^.]+$/, '').replace(/-/g, ' '),
+    optimizacion: { ...optimizada, blob: undefined, resumen: resumenOptimizacion(optimizada) }
+  }
+}
+
+/**
+ * Borra un archivo del bucket por su ruta.
+ *
+ * Se usa para no dejar basura cuando se sustituye o se quita una imagen que no
+ * vive en `product_images`. Falla en silencio a propósito en quien la llama:
+ * que quede un archivo huérfano ocupando cuota es molesto, pero no es motivo
+ * para que la administradora vea un error en una operación que sí funcionó.
+ */
+export async function borrarArchivo(ruta) {
+  if (!ruta) return
+  const { error } = await supabase.storage.from(BUCKET).remove([ruta])
+  if (error) throw new Error(`No se pudo borrar el archivo: ${error.message}`)
+}
+
 /** Sube y registra la imagen en `product_images` en un solo paso. */
 export async function registrarImagenProducto(archivo, opciones) {
   const subida = await subirImagen(archivo, opciones)
