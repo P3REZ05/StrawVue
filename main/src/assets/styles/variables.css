@@ -7,8 +7,15 @@
   --secondary: #ffffff;
   --success: #ffc1cc;
 
-  --font-primary: 'Roboto', sans-serif;
-  --font-secondary: 'Open Sans', sans-serif;
+  /* Poppins para todo, titulares incluidos. Se carga en `index.html`; la pila
+     de reserva es la del sistema, para que la página siga legible si Google
+     Fonts no responde.
+
+     Se probó Fraunces (serif) para los titulares y se descartó: en mayúsculas
+     y con peso alto —que es como están escritos casi todos aquí— se lee más
+     pesada que elegante. */
+  --font-primary: 'Poppins', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-secondary: 'Poppins', system-ui, sans-serif;
   --font-first: 'Harmonia Sans Pro Condensed Semi Bold', sans-serif;
   --font-third: 'Ut Sa Ha Gumm Thai Regular', sans-serif;
 }
